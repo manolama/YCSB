@@ -68,6 +68,21 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
   }
   
   @Override
+  public void cleanup() throws DBException {
+    synchronized (MUTEX) {
+      if (client != null) {
+        try {
+          client.shutdown().joinUninterruptibly(joinTimeout);
+        } catch (Exception e) {
+          System.err.println("Failed to shutdown the AsyncHBase client "
+              + "properly: " + e.getMessage());
+        }
+        client = null;
+      }
+    }
+  }
+  
+  @Override
   public Status read(String table, String key, Set<String> fields,
       HashMap<String, ByteIterator> result) {
     setTable(table);
