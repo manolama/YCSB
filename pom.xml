@@ -72,6 +72,7 @@ LICENSE file.
     <hbase098.version>0.98.14-hadoop2</hbase098.version>
     <hbase10.version>1.0.2</hbase10.version>
     <accumulo.version>1.6.0</accumulo.version>
+    <asynchbase.version>1.7.1</asynchbase.version>
     <cassandra.version>1.2.9</cassandra.version>
     <cassandra.cql.version>1.0.3</cassandra.cql.version>
     <cassandra2.cql.version>2.1.8</cassandra2.cql.version>
@@ -103,6 +104,7 @@ LICENSE file.
     <!-- all the datastore bindings, lex sorted please -->
     <module>accumulo</module>
     <module>aerospike</module>
+    <module>asynchbase</module>
     <module>cassandra</module>
     <module>cassandra2</module>
     <module>couchbase</module>

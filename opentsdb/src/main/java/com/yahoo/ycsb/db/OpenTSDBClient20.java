@@ -5,7 +5,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Set;
@@ -15,6 +14,8 @@ import com.yahoo.ycsb.ByteIterator;
 import com.yahoo.ycsb.DBException;
 import com.yahoo.ycsb.Status;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.WritableDataPoints;
 import net.opentsdb.utils.Config;
@@ -23,13 +24,16 @@ import net.opentsdb.utils.Config;
  * OpenTSDB client.
  */
 public class OpenTSDBClient20 extends com.yahoo.ycsb.DB {
-  private static final Logger LOG = LoggerFactory.getLogger(OpenTSDBClient20.class);
+  private static final Logger LOG = (Logger)LoggerFactory.getLogger(OpenTSDBClient20.class);
   
   private static final Object MUTEX = new Object();
   private static TSDB tsdbClient;
   
   @Override
   public void init() throws DBException {
+    Logger root = (Logger)LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+    root.setLevel(Level.INFO);
+    
     try {
       synchronized (MUTEX) {
         if (tsdbClient == null) {
