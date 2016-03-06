@@ -75,6 +75,7 @@ DATABASES = {
     "mongodb"      : "com.yahoo.ycsb.db.MongoDbClient",
     "mongodb-async": "com.yahoo.ycsb.db.AsyncMongoDbClient",
     "nosqldb"      : "com.yahoo.ycsb.db.NoSqlDbClient",
+    "opentsdb"     : "com.yahoo.ycsb.db.OpenTSDBClient20",
     "orientdb"     : "com.yahoo.ycsb.db.OrientDBClient",
     "redis"        : "com.yahoo.ycsb.db.RedisClient",
     "s3"           : "com.yahoo.ycsb.db.S3Client",

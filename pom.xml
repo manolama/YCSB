@@ -82,6 +82,7 @@ LICENSE file.
     <!--<mapkeeper.version>1.0</mapkeeper.version>-->
     <mongodb.version>3.0.3</mongodb.version>
     <mongodb.async.version>2.0.1</mongodb.async.version>
+    <opentsdb.version>2.2.0</opentsdb.version>
     <orientdb.version>2.1.8</orientdb.version>
     <redis.version>2.0.0</redis.version>
     <s3.version>1.10.20</s3.version>
@@ -121,6 +122,7 @@ LICENSE file.
     <module>memcached</module>
     <module>mongodb</module>
     <module>nosqldb</module>
+    <module>opentsdb</module>
     <module>orientdb</module>
     <module>redis</module>
     <module>s3</module>
@@ -149,7 +151,7 @@ LICENSE file.
           <target>1.7</target>
         </configuration>
       </plugin>
-      <plugin>
+      <!--<plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
         <executions>
@@ -164,7 +166,7 @@ LICENSE file.
             </configuration>
           </execution>
         </executions>
-      </plugin>
+      </plugin> -->
     </plugins>
   </build>
 </project>
