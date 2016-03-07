@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import java.util.Set;
 import java.util.Vector;
 
+import com.google.bigtable.repackaged.com.google.protobuf.BigtableZeroCopyByteStringUtil;
 import com.google.bigtable.repackaged.com.google.protobuf.ByteString;
 import com.google.bigtable.repackaged.com.google.protobuf.ServiceException;
 import com.google.bigtable.v1.MutateRowRequest;
@@ -173,15 +174,15 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       
       final MutateRowRequest.Builder rowMutation = MutateRowRequest.newBuilder();
       rowMutation.setRowKey(ByteString.copyFromUtf8(key));
-      rowMutation.setTableNameBytes(ByteString.copyFrom(lastTableBytes));
+      rowMutation.setTableNameBytes(BigtableZeroCopyByteStringUtil.wrap(lastTableBytes));
       
       for (final Entry<String, ByteIterator> entry : values.entrySet()) {
         final Mutation.Builder mutationBuilder = rowMutation.addMutationsBuilder();
         final SetCell.Builder setCellBuilder = mutationBuilder.getSetCellBuilder();
         
-        setCellBuilder.setFamilyNameBytes(ByteString.copyFrom(columnFamilyBytes));
-        setCellBuilder.setColumnQualifier(ByteString.copyFrom(entry.getKey().getBytes()));
-        setCellBuilder.setValue(ByteString.copyFrom(entry.getValue().toArray()));
+        setCellBuilder.setFamilyNameBytes(BigtableZeroCopyByteStringUtil.wrap(columnFamilyBytes));
+        setCellBuilder.setColumnQualifier(BigtableZeroCopyByteStringUtil.wrap(entry.getKey().getBytes()));
+        setCellBuilder.setValue(BigtableZeroCopyByteStringUtil.wrap(entry.getValue().toArray()));
         setCellBuilder.setTimestampMicros(-1);
       }
       
