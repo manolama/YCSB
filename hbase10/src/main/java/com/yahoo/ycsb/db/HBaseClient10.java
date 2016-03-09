@@ -132,9 +132,12 @@ public class HBaseClient10 extends com.yahoo.ycsb.DB {
     }
 
     try {
-      THREAD_COUNT.getAndIncrement();
+      
       synchronized(THREAD_COUNT) {
-        connection = ConnectionFactory.createConnection(config);
+        THREAD_COUNT.getAndIncrement();
+        if (connection == null) {
+          connection = ConnectionFactory.createConnection(config);
+        }
       }
     } catch (java.io.IOException e) {
       throw new DBException(e);
@@ -194,6 +197,7 @@ public class HBaseClient10 extends com.yahoo.ycsb.DB {
         int threadCount = THREAD_COUNT.decrementAndGet();
         if (threadCount <= 0 && connection != null) {
           connection.close();
+          connection = null;
         }
       }
     } catch (IOException e) {
