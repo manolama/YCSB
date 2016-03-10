@@ -132,7 +132,6 @@ public class HBaseClient10 extends com.yahoo.ycsb.DB {
     }
 
     try {
-      
       synchronized(THREAD_COUNT) {
         THREAD_COUNT.getAndIncrement();
         if (connection == null) {

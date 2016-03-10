@@ -28,7 +28,7 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
   private static final Object MUTEX = new Object();
   private static HBaseClient client;
   
-  private byte[] columnFamilyBytes = "cf".getBytes();
+  private byte[] columnFamilyBytes;
   
   private String lastTable = "";
   private byte[] lastTableBytes;
@@ -52,11 +52,49 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
     Logger root = (Logger)LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
     root.setLevel(Level.INFO);
     
+    if (getProperties().getProperty("clientbuffering", "false")
+        .toLowerCase().equals("true")) {
+      clientSideBuffering = true;
+    }
+    if (getProperties().getProperty("durability", "true").toLowerCase().equals("false")) {
+      durability = false;
+    }
+    final String columnFamily = getProperties().getProperty("columnfamily");
+    if (columnFamily == null || columnFamily.isEmpty()) {
+      System.err.println("Error, must specify a columnfamily for HBase table");
+      throw new DBException("No columnfamily specified");
+    }
+    columnFamilyBytes = columnFamily.getBytes();
+    
+    final boolean prefetchMeta = getProperties().getProperty("prefetchmeta", "false")
+        .toLowerCase().equals("true") ? true : false;
     try {
       synchronized (MUTEX) {
         if (client == null) {
           final Config config = new Config("/etc/opentsdb/opentsdb.conf");
           client = new HBaseClient(config);
+          
+          // Terminate right now if table does not exist, since the client
+          // will not propagate this error upstream once the workload
+          // starts.
+          String table = com.yahoo.ycsb.workloads.CoreWorkload.table;
+          try {
+            client.ensureTableExists(table).join(joinTimeout);
+          } catch (InterruptedException e1) {
+            Thread.currentThread().interrupt();
+          } catch (Exception e) {
+            throw new DBException(e);
+          }
+          
+          if (prefetchMeta) {
+            try {
+              client.prefetchMeta(table).join(joinTimeout);
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+            } catch (Exception e) {
+              throw new DBException(e);
+            }
+          }
         }
       }
       

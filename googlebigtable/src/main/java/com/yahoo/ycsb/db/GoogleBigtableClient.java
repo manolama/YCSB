@@ -76,7 +76,7 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
    * HBaseClient. For measuring insert/update/delete latencies, client side
    * buffering should be disabled.
    */
-  private boolean clientSideBuffering = false;
+  private boolean clientSideBuffering = true;
   private long writeBufferSize = 1024 * 1024 * 12;
   
   @Override
@@ -108,6 +108,23 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   }
   
   @Override
+  public void cleanup() throws DBException {
+    if (useHTableInterface) {
+      try {
+        connection.close();
+      } catch (IOException e) {
+        throw new DBException(e);
+      }
+    } else {
+      try {
+        session.close();
+      } catch (IOException e) {
+        throw new DBException(e);
+      }
+    }
+  }
+  
+  @Override
   public Status read(String table, String key, Set<String> fields,
       HashMap<String, ByteIterator> result) {
     // TODO Auto-generated method stub
@@ -125,7 +142,7 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   public Status update(String table, String key,
       HashMap<String, ByteIterator> values) {
     if (useHTableInterface) {
-   // if this is a "new" table, init HTable object. Else, use existing one
+      // if this is a "new" table, init HTable object. Else, use existing one
       if (!tableName.equals(table)) {
         currentTable = null;
         try {
