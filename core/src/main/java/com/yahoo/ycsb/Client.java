@@ -249,7 +249,8 @@ class ClientThread extends Thread
   final Measurements _measurements;
 
   /**
-   * Constructor.
+   * Constructor for backwards compatbility in case anyone is using it. Sets
+   * the thread ID to -1.
    *
    * @param db the DB implementation to use
    * @param dotransactions true to do transactions, false to insert data
@@ -260,6 +261,23 @@ class ClientThread extends Thread
    * @param completeLatch The latch tracking the completion of all clients.
    */
   public ClientThread(DB db, boolean dotransactions, Workload workload, Properties props, int opcount, double targetperthreadperms, CountDownLatch completeLatch)
+  {
+    this(db, dotransactions, workload, props, opcount, targetperthreadperms, completeLatch, -1);
+  }
+  
+  /**
+   * Constructor.
+   *
+   * @param db the DB implementation to use
+   * @param dotransactions true to do transactions, false to insert data
+   * @param workload the workload to use
+   * @param props the properties defining the experiment
+   * @param opcount the number of operations (transactions or inserts) to do
+   * @param targetperthreadperms target number of operations per thread per ms
+   * @param completeLatch The latch tracking the completion of all clients.
+   * @param threadID The ID of the thread as created, starting at 0
+   */
+  public ClientThread(DB db, boolean dotransactions, Workload workload, Properties props, int opcount, double targetperthreadperms, CountDownLatch completeLatch, int threadID)
   {
     _db=db;
     _dotransactions=dotransactions;
@@ -274,6 +292,11 @@ class ClientThread extends Thread
     _measurements = Measurements.getMeasurements();
     _spinSleep = Boolean.valueOf(_props.getProperty("spin.sleep", "false"));
     _completeLatch=completeLatch;
+    _threadid = threadID;
+  }
+  
+  void setThreadID(final int threadID) {
+    _threadid = threadID;
   }
 
   public int getOpsDone()
@@ -286,7 +309,12 @@ class ClientThread extends Thread
   {
     try
     {
+      final long start = _measurements.markTimestamp("DBINIT", _threadid);
+      System.out.println("INITIALIZING A NEW THREAD: " + _threadid);
       _db.init();
+      final long end = _measurements.markTimestamp("DBINITCOMPLETE", _threadid);
+      
+      _measurements.recordStaticMeasure("INITLATENCY_" + _threadid, (int)(end - start) / 1000);
     }
     catch (DBException e)
     {
@@ -297,7 +325,9 @@ class ClientThread extends Thread
 
     try
     {
+      long ts = _measurements.markTimestamp("WORKLOADINIT", _threadid);
       _workloadstate=_workload.initThread(_props,_threadid,_threadcount);
+      _measurements.recordStaticMeasure("WORKLOADINIT_LATENCY" + _threadid, (int)(System.nanoTime() - ts) / 1000);
     }
     catch (WorkloadException e)
     {
@@ -321,7 +351,7 @@ class ClientThread extends Thread
     {
       if (_dotransactions)
       {
-        long startTimeNanos = System.nanoTime();
+        long startTimeNanos = _measurements.markTimestamp("STARTTRANSACTIONS", Thread.currentThread().getId());
 
         while (((_opcount == 0) || (_opsdone < _opcount)) && !_workload.isStopRequested())
         {
@@ -338,7 +368,7 @@ class ClientThread extends Thread
       }
       else
       {
-        long startTimeNanos = System.nanoTime();
+        long startTimeNanos = _measurements.markTimestamp("STARTTRANSACTIONS", Thread.currentThread().getId());
 
         while (((_opcount == 0) || (_opsdone < _opcount)) && !_workload.isStopRequested())
         {
@@ -364,7 +394,9 @@ class ClientThread extends Thread
     try
     {
       _measurements.setIntendedStartTimeNs(0);
+      long cleanup = _measurements.markTimestamp("ENDTRANSACTIONS", _threadid);
       _db.cleanup();
+      _measurements.recordStaticMeasure("CLEANUP_LATENCY_" + _threadid, (int)(System.nanoTime() - cleanup) / 1000);
     }
     catch (DBException e)
     {
@@ -882,8 +914,8 @@ public class Client
         ++threadopcount;
       }
 
-      ClientThread t=new ClientThread(db,dotransactions,workload,props,threadopcount, targetperthreadperms, completeLatch);
-
+      ClientThread t=new ClientThread(db,dotransactions,workload,props,threadopcount, targetperthreadperms, completeLatch, threadid);
+      
       clients.add(t);
     }
 

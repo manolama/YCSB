@@ -197,4 +197,14 @@ public class OneMeasurementHdrHistogram extends OneMeasurement {
           return i + suffixes[i % 10];
       }
     }
+
+    @Override
+    public String toString() {
+      final StringBuilder buffer = new StringBuilder();
+      buffer.append("recorder=")
+            .append(histogram)
+            .append(", histogram=")
+            .append(totalHistogram);
+      return buffer.toString();
+    }
 }

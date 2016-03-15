@@ -53,6 +53,16 @@ public class RandomPrintableStringGenerator extends Generator<String> {
   /**
    * Only decimals, upper and lower case letters.
    */
+  public final static Set<Integer> BASICALPHATYPES;
+  static {
+    BASICALPHATYPES = new HashSet<Integer>(2);
+    BASICALPHATYPES.add((int)Character.UPPERCASE_LETTER);
+    BASICALPHATYPES.add((int)Character.LOWERCASE_LETTER);
+  }
+  
+  /**
+   * Only decimals, upper and lower case letters.
+   */
   public final static Set<Integer> BASICALPHANUMERICTYPES;
   static {
     BASICALPHANUMERICTYPES = new HashSet<Integer>(3);
@@ -85,13 +95,11 @@ public class RandomPrintableStringGenerator extends Generator<String> {
   private String lastValue;
   
   public RandomPrintableStringGenerator() {
-    length = DEFAULTSTRINGLENGTH;
-    characterSet = getAlphaNumericASCIISet();
+    this(DEFAULTSTRINGLENGTH);
   }
   
   public RandomPrintableStringGenerator(final int length) {
-    this.length = length;
-    characterSet = getAlphaNumericASCIISet();
+    this(length, getAlphaNumericASCIISet());
   }
   
   public RandomPrintableStringGenerator(final int length, final int[] characterSet) {
@@ -132,6 +140,16 @@ public class RandomPrintableStringGenerator extends Generator<String> {
     final List<Integer> validCharacters =new ArrayList<Integer>();
     validCharacters.add(10); // newline
     validCharacters.addAll(generateCharacterSet(0, 127, null, false, null));
+    final int[] characterSet = new int[validCharacters.size()];
+    for (int i = 0; i < validCharacters.size(); i++) {
+      characterSet[i] = validCharacters.get(i);
+    }
+    return characterSet;
+  }
+  
+  public static int[] getAlphaASCIISet() {
+    final List<Integer> validCharacters = 
+        generateCharacterSet(0, 127, null, false, BASICALPHATYPES);
     final int[] characterSet = new int[validCharacters.size()];
     for (int i = 0; i < validCharacters.size(); i++) {
       characterSet[i] = validCharacters.get(i);
@@ -210,8 +228,5 @@ public class RandomPrintableStringGenerator extends Generator<String> {
     }
     return validCharacters;
   }
-
-
-
 
 }

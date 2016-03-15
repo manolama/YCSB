@@ -70,6 +70,7 @@ public class Measurements {
     return singleton;
   }
 
+  final ConcurrentHashMap<String, Long> _nanoTimeStamps;
   final ConcurrentHashMap<String,OneMeasurement> _opToMesurementMap;
   final ConcurrentHashMap<String,OneMeasurement> _opToIntendedMesurementMap;
   final MeasurementType _measurementType;
@@ -81,6 +82,7 @@ public class Measurements {
    */
   public Measurements(Properties props)
   {
+    _nanoTimeStamps = new ConcurrentHashMap<String, Long>();
     _opToMesurementMap=new ConcurrentHashMap<String,OneMeasurement>();
     _opToIntendedMesurementMap=new ConcurrentHashMap<String,OneMeasurement>();
 
@@ -135,6 +137,8 @@ public class Measurements {
 
   OneMeasurement constructOneMeasurement(String name)
   {
+    System.out.println("New One Measurement: " + name);
+    
     switch (_measurementType)
     {
     case HISTOGRAM:
@@ -171,6 +175,11 @@ public class Measurements {
     }
   }
 
+  @Override
+  public String toString() {
+    return _opToMesurementMap.toString();
+  }
+  
   ThreadLocal<StartTimeHolder> tlIntendedStartTime = new ThreadLocal<Measurements.StartTimeHolder>() {
     protected StartTimeHolder initialValue() {
       return new StartTimeHolder();
@@ -178,8 +187,11 @@ public class Measurements {
   };
 
   public void setIntendedStartTimeNs(long time) {
-    if(_measurementInterval==0)
-      return;
+    System.out.println("[" + Thread.currentThread().getId() + "] setting intended start time to " + time);
+    if(_measurementInterval==0) {
+      System.out.println("[" + Thread.currentThread().getId() + "] skipping setting intended start time " + time);
+      return; 
+    }
     tlIntendedStartTime.get().time=time;
   }
 
@@ -189,12 +201,31 @@ public class Measurements {
     return tlIntendedStartTime.get().startTime();
   }
 
+  public long markTimestamp(final String operation) {
+    final long ts = System.nanoTime();
+    _nanoTimeStamps.put(operation, ts);
+    return ts;
+  }
+  
+  public long markTimestamp(final String operation, final long threadID) {
+    final long ts = System.nanoTime();
+    _nanoTimeStamps.put(operation + "_" + threadID, ts);
+    return ts;
+  }
+  
+  public void recordStaticMeasure(final String operation, final int latency) {
+    OneMeasurement m = new OneMeasurementSingle(operation);
+    m.measure(latency);
+    _opToMesurementMap.put(operation, m);
+  }
+  
   /**
    * Report a single value of a single metric. E.g. for read latency, operation="READ" and latency is the measured
    * value.
    */
   public void measure(String operation, int latency)
   {
+    //System.out.println("[" + Thread.currentThread().getId() + "] Op=" + operation + " lat: " + latency);
     if(_measurementInterval==1)
       return;
     try

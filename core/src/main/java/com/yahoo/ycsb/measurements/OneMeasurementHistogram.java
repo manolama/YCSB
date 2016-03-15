@@ -20,7 +20,7 @@ package com.yahoo.ycsb.measurements;
 import java.io.IOException;
 import java.text.DecimalFormat;
 import java.util.Properties;
-
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -173,5 +173,21 @@ public class OneMeasurementHistogram extends OneMeasurement
     windowtotallatency=0;
     windowoperations=0;
     return "["+getName()+" AverageLatency(us)="+d.format(report)+"]";
+  }
+
+  @Override
+  public String toString() {
+    final StringBuilder buffer = new StringBuilder();
+    buffer.append("buckets=")
+          .append(_buckets)
+          .append(", buckets=")
+          .append(Arrays.toString(histogram))
+          .append(", operations=")
+          .append(operations)
+          .append(", totalLatency=")
+          .append(totallatency)
+          .append(", windowOperation=")
+          .append(windowoperations);
+    return buffer.toString();
   }
 }

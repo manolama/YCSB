@@ -50,6 +50,7 @@ public class DBWrapper extends DB
   {
     _db=db;
     _measurements=Measurements.getMeasurements();
+    System.out.println("Creating a DB Wrapper for : " + db);
   }
 
   /**
