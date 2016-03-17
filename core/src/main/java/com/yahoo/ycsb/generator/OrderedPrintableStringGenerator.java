@@ -1,5 +1,7 @@
 package com.yahoo.ycsb.generator;
 
+import com.yahoo.ycsb.Utils;
+
 public class OrderedPrintableStringGenerator extends Generator<String> {
 
   private final int[] characterSet;
@@ -14,12 +16,11 @@ public class OrderedPrintableStringGenerator extends Generator<String> {
   
   public OrderedPrintableStringGenerator() {
     this(RandomPrintableStringGenerator.DEFAULTSTRINGLENGTH,
-        RandomPrintableStringGenerator.getAlphaASCIISet());
+        Utils.printableBasicAlphaASCIISet());
   }
   
   public OrderedPrintableStringGenerator(final int length) {
-    this(length,
-        RandomPrintableStringGenerator.getAlphaASCIISet());
+    this(length, Utils.printableBasicAlphaASCIISet());
   }
   
   public OrderedPrintableStringGenerator(final int length, final int[] characterSet) {

@@ -30,7 +30,7 @@ public class YCSBSCRATCH {
   static void testCharSets() {
     //  final int[] characterSet = RandomPrintableStringGenerator.generateCharacterSet(
     //  127, null, false, RandomPrintableStringGenerator.ALLBUTCONTROL);
-    final int[] characterSet = RandomPrintableStringGenerator.getFullASCIISet();
+    final int[] characterSet = Utils.fullPrintableBasicASCIISet();
     for (int c : characterSet) {
     System.out.println("Char: [" + new String(Character.toChars(c)) + "] "
         + "cp [" + c + "]  type [" + Character.getType(c) + "] isAlpha [" + 
@@ -41,7 +41,8 @@ public class YCSBSCRATCH {
   
   static void randomPrintableStringGenerator() {
     RandomPrintableStringGenerator gen = //new RandomPrintableStringGenerator();
-        new RandomPrintableStringGenerator(256, RandomPrintableStringGenerator.getFullPlaneZeroSet());
+        new RandomPrintableStringGenerator(256, 
+            Utils.fullPrintablePlaneZeroSet());
     long st = System.nanoTime();
     for (int i = 0; i < 1000000; i++) {
       if (i < 40) {

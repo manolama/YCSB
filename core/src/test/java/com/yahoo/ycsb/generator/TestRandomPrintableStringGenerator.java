@@ -2,11 +2,13 @@ package com.yahoo.ycsb.generator;
 
 import org.testng.annotations.Test;
 
+import com.yahoo.ycsb.Utils;
+
 public class TestRandomPrintableStringGenerator {
 
   @Test
   public void foobar() {
-    final int[] characterSet = RandomPrintableStringGenerator.getFullASCIISet();
+    final int[] characterSet = Utils.printableBasicAlphaASCIISet();
     for (int c : characterSet) {
       System.out.println("Char: [" + new String(Character.toChars(c)) + "] "
           + "cp [" + c + "]  type [" + Character.getType(c) + "] isAlpha [" + 
