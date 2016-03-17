@@ -116,56 +116,60 @@ public class Utils
 
       /**
        * Reads a big-endian 8-byte long from an offset in the given array.
-       * @param b The array to read from.
+       * @param bytes The array to read from.
        * @return A long integer.
        * @throws IndexOutOfBoundsException if the byte array is too small.
        */
-      public static long bytesToLong(final byte[] b) {
-        return (b[0] & 0xFFL) << 56
-             | (b[1] & 0xFFL) << 48
-             | (b[2] & 0xFFL) << 40
-             | (b[3] & 0xFFL) << 32
-             | (b[4] & 0xFFL) << 24
-             | (b[5] & 0xFFL) << 16
-             | (b[6] & 0xFFL) << 8
-             | (b[7] & 0xFFL) << 0;
+      public static long bytesToLong(final byte[] bytes) {
+        return (bytes[0] & 0xFFL) << 56
+             | (bytes[1] & 0xFFL) << 48
+             | (bytes[2] & 0xFFL) << 40
+             | (bytes[3] & 0xFFL) << 32
+             | (bytes[4] & 0xFFL) << 24
+             | (bytes[5] & 0xFFL) << 16
+             | (bytes[6] & 0xFFL) << 8
+             | (bytes[7] & 0xFFL) << 0;
       }
       
       /**
        * Writes a big-endian 8-byte long at an offset in the given array.
-       * @param n The value to encode
+       * @param val The value to encode
        * @throws IndexOutOfBoundsException if the byte array is too small.
        */
-      public static byte[] longToBytes(final long n) {
-        final byte[] b = new byte[8];
-        b[0] = (byte) (n >>> 56);
-        b[1] = (byte) (n >>> 48);
-        b[2] = (byte) (n >>> 40);
-        b[3] = (byte) (n >>> 32);
-        b[4] = (byte) (n >>> 24);
-        b[5] = (byte) (n >>> 16);
-        b[6] = (byte) (n >>>  8);
-        b[7] = (byte) (n >>>  0);
-        return b;
+      public static byte[] longToBytes(final long val) {
+        final byte[] bytes = new byte[8];
+        bytes[0] = (byte) (val >>> 56);
+        bytes[1] = (byte) (val >>> 48);
+        bytes[2] = (byte) (val >>> 40);
+        bytes[3] = (byte) (val >>> 32);
+        bytes[4] = (byte) (val >>> 24);
+        bytes[5] = (byte) (val >>> 16);
+        bytes[6] = (byte) (val >>>  8);
+        bytes[7] = (byte) (val >>>  0);
+        return bytes;
       }
       
       /**
        * Parses the byte array into a double.
        * The byte array MUST be 8 bytes long and have been encoded using 
        * {@link #doubleToBytes}
-       * @param b The byte array to parse, at least 8 bytes
+       * @param bytes The byte array to parse, at least 8 bytes
        * @return A double value read from the byte array
+       * @throws IllegalArgumentException if the byte array is not 8 bytes wide
        */
-      public static double bytesToDouble(final byte[] b) {
-        return Double.longBitsToDouble(bytesToLong(b));
+      public static double bytesToDouble(final byte[] bytes) {
+        if (bytes.length != 8) {
+          throw new IllegalArgumentException("Byte array must be 8 bytes wide.");
+        }
+        return Double.longBitsToDouble(bytesToLong(bytes));
       }
       
       /**
        * Encodes the double value as an 8 byte array 
-       * @param n The double value to encode
+       * @param val The double value to encode
        * @return A byte array of length 8
        */
-      public static byte[] doubleToBytes(final double n) {
-        return longToBytes(Double.doubleToRawLongBits(n));
+      public static byte[] doubleToBytes(final double val) {
+        return longToBytes(Double.doubleToRawLongBits(val));
       }
 }
