@@ -1,7 +1,9 @@
 package com.yahoo.ycsb.workloads;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 import com.yahoo.ycsb.ByteArrayByteIterator;
 import com.yahoo.ycsb.ByteIterator;
@@ -14,11 +16,14 @@ import com.yahoo.ycsb.Workload;
 import com.yahoo.ycsb.WorkloadException;
 import com.yahoo.ycsb.generator.Generator;
 import com.yahoo.ycsb.generator.OrderedPrintableStringGenerator;
+import com.yahoo.ycsb.generator.UnixEpochTimestampGenerator;
 
-public class TimeseriesWorkload extends Workload {
-
-  public static final String TAG_COUNT_PROPERTY = "tagcount";
+public class TimeseriesWorkload extends Workload {  
+  public static final String TAG_COUNT_PROPERTY = "tag_count";
   public static final String TAG_COUNT_PROPERTY_DEFAULT = "4";
+  
+  public static final String TAG_CARDINALITY_PROPERTY = "tag_cardinality";
+  public static final String TAG_CARDINALITY_PROPERTY_DEFAULT = "1, 2, 4, 8";
   
   private Generator<String> keyGenerator;
   private Generator<String> tagKeyGenerator;
@@ -26,7 +31,7 @@ public class TimeseriesWorkload extends Workload {
   private int recordcount;
   private int tagPairs;
   private String table;
-  private long timestamp;
+  private UnixEpochTimestampGenerator timestampGenerator;
   
   private String[] keys;
   private int keyIdx;
@@ -35,12 +40,11 @@ public class TimeseriesWorkload extends Workload {
   private int[] tagCardinality;
   private String[][] tagValues;
   private int[] tagValueIdxs;
-  private int msbTagCardinality;
+  private int firstIncrementableCardinality;
   private boolean rollover;
   
   @Override
   public void init(Properties p) throws WorkloadException {
-    timestamp = System.currentTimeMillis() / 1000;
     recordcount =
         Integer.parseInt(p.getProperty(Client.RECORD_COUNT_PROPERTY, 
             Client.DEFAULT_RECORD_COUNT));
@@ -51,21 +55,45 @@ public class TimeseriesWorkload extends Workload {
     keyGenerator = new OrderedPrintableStringGenerator(4);
     tagKeyGenerator = new OrderedPrintableStringGenerator(2);
     tagValueGenerator = new OrderedPrintableStringGenerator(4);
-    tagPairs = 2;
-    
+    tagPairs = Integer.parseInt(p.getProperty(TAG_COUNT_PROPERTY, 
+        TAG_COUNT_PROPERTY_DEFAULT));
     tagCardinality = new int[tagPairs];
-    tagCardinality[0] = 1;
-    tagCardinality[1] = 2;
-//    tagCardinality[2] = 1;
-//    tagCardinality[3] = 4;
     
-    for (int i = 0; i < tagCardinality.length; ++i) {
-      if (tagCardinality[i] > 1) {
-        msbTagCardinality = i;
+    final String tagCardinalityString = p.getProperty(TAG_CARDINALITY_PROPERTY, 
+        TAG_CARDINALITY_PROPERTY_DEFAULT);
+    final String[] tagCardinalityParts = tagCardinalityString.split(",");
+    int idx = 0;
+    for (final String cardinality : tagCardinalityParts) {
+      try {
+        tagCardinality[idx] = Integer.parseInt(cardinality.trim());
+      } catch (NumberFormatException nfe) {
+        throw new WorkloadException("Unable to parse cardinality: " + 
+            cardinality, nfe);
+      }
+      if (tagCardinality[idx] < 1) {
+        throw new WorkloadException("Cardinality must be greater than zero: " + 
+            tagCardinality[idx]);
+      }
+      ++idx;
+      if (idx >= tagPairs) {
+        // we have more cardinalities than tag keys so bail at this point.
         break;
       }
     }
-    numKeys = 2;
+    // fill tags without explicit cardinality with 1
+    if (idx < tagPairs) {
+      tagCardinality[idx++] = 1;
+    }
+    
+    for (int i = 0; i < tagCardinality.length; ++i) {
+      if (tagCardinality[i] > 1) {
+        firstIncrementableCardinality = i;
+        break;
+      }
+    }
+    numKeys = Integer.parseInt(p.getProperty(CoreWorkload.FIELD_COUNT_PROPERTY, 
+        CoreWorkload.FIELD_COUNT_PROPERTY_DEFAULT));
+    
     keys = new String[numKeys];
     for (int i = 0; i < numKeys; ++i) {
       keys[i] = keyGenerator.nextString();
@@ -83,17 +111,43 @@ public class TimeseriesWorkload extends Workload {
         tagValues[i][x] = tagValueGenerator.nextString();
       }
     }
-
-//    System.out.println("KEYS: " + Arrays.toString(keys));
-//    System.out.println("TAG KEYS: " + Arrays.toString(tagKeys));
-//    System.out.print("TAG VALUES: " );
-//    for (int i = 0; i < tagValues.length; i++) {
-//      if (i > 0) {
-//        System.out.print(", ");
-//      }
-//      System.out.print("(" + i + ")" + Arrays.toString(tagValues[i]));
-//    }
-//    System.out.println();
+    
+    // figure out the start timestamp based on the units, cardinality and interval
+    TimeUnit timeUnits;
+    int timestampInterval = 0;
+    
+    try {
+      timestampInterval = Integer.parseInt(p.getProperty(
+          UnixEpochTimestampGenerator.TIMESTAMP_INTERVAL_PROPERTY, UnixEpochTimestampGenerator.TIMESTAMP_INTERVAL_PROPERTY_DEFAULT));
+    } catch (NumberFormatException nfe) {
+      throw new WorkloadException("Unable to parse the " + 
+          UnixEpochTimestampGenerator.TIMESTAMP_INTERVAL_PROPERTY, nfe);
+    }
+    
+    try {
+      
+      timeUnits = TimeUnit.valueOf(p.getProperty(UnixEpochTimestampGenerator.TIMESTAMP_UNITS_PROPERTY, 
+          UnixEpochTimestampGenerator.TIMESTAMP_UNITS_PROPERTY_DEFAULT).toUpperCase());
+    } catch (IllegalArgumentException e) {
+      throw new WorkloadException("Unknown time unit type", e);
+    }
+    if (timeUnits == TimeUnit.NANOSECONDS || timeUnits == TimeUnit.MICROSECONDS) {
+      throw new WorkloadException("YCSB doesn't support " + timeUnits + 
+          " at this time.");
+    }
+    final String startingTimestamp = 
+        p.getProperty(UnixEpochTimestampGenerator.TIMESTAMP_START_PROPERTY);
+    if (startingTimestamp == null || startingTimestamp.isEmpty()) {
+      timestampGenerator = new UnixEpochTimestampGenerator(timestampInterval, timeUnits);
+    } else {
+      try {
+        timestampGenerator = new UnixEpochTimestampGenerator(timestampInterval, timeUnits, 
+            Long.parseLong(startingTimestamp));
+      } catch (NumberFormatException nfe) {
+        throw new WorkloadException("Unable to parse the " + 
+            UnixEpochTimestampGenerator.TIMESTAMP_START_PROPERTY, nfe);
+      }
+    }
   }
   
   @Override
@@ -114,7 +168,7 @@ public class TimeseriesWorkload extends Workload {
 
   private String nextDataPoint(HashMap<String, ByteIterator> map) {
     if (rollover) {
-      ++timestamp;
+      timestampGenerator.nextValue();
       rollover = false;
     }
     
@@ -124,9 +178,9 @@ public class TimeseriesWorkload extends Workload {
       map.put(tagKeys[i], new StringByteIterator(tagValues[i][tvidx]));
     }
     // TODO - byte array
-    map.put("YCSBTS", new ByteArrayByteIterator(Utils.longToBytes(timestamp)));
+    map.put("YCSBTS", new ByteArrayByteIterator(Utils.longToBytes(timestampGenerator.currentValue())));
     map.put("YCSBV", new ByteArrayByteIterator(Utils.doubleToBytes(
-        Utils.random().nextDouble())));
+        Utils.random().nextDouble() * 100000)));
     
     boolean tagRollover = false;
     for (int i = tagCardinality.length - 1; i >= 0; --i) {
@@ -137,7 +191,7 @@ public class TimeseriesWorkload extends Workload {
       
       if (tagValueIdxs[i] + 1 >= tagCardinality[i]) {
         tagValueIdxs[i] = 0;
-        if (i == msbTagCardinality) {
+        if (i == firstIncrementableCardinality) {
           tagRollover = true;
         }
       } else {
