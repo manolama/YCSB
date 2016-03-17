@@ -27,22 +27,31 @@ import org.testng.annotations.Test;
 public class TestUtils {
 
   @Test
-  public void bytesToLong() throws Exception {
+  public void bytesToFromLong() throws Exception {
     byte[] bytes = new byte[8];
     assertEquals(Utils.bytesToLong(bytes), 0L);
+    assertArrayEquals(Utils.longToBytes(0), bytes);
     
     bytes[7] = 1;
     assertEquals(Utils.bytesToLong(bytes), 1L);
+    assertArrayEquals(Utils.longToBytes(1L), bytes);
     
     bytes = new byte[] { 127, -1, -1, -1, -1, -1, -1, -1 };
     assertEquals(Utils.bytesToLong(bytes), Long.MAX_VALUE);
+    assertArrayEquals(Utils.longToBytes(Long.MAX_VALUE), bytes);
     
     bytes = new byte[] { -128, 0, 0, 0, 0, 0, 0, 0 };
     assertEquals(Utils.bytesToLong(bytes), Long.MIN_VALUE);
+    assertArrayEquals(Utils.longToBytes(Long.MIN_VALUE), bytes);
     
     bytes = new byte[] { (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, 
         (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF  };
     assertEquals(Utils.bytesToLong(bytes), -1L);
+    assertArrayEquals(Utils.longToBytes(-1L), bytes);
+    
+    // if the array is too long we just skip the remainder
+    bytes = new byte[] { 0, 0, 0, 0, 0, 0, 0, 1, 42, 42, 42 };
+    assertEquals(Utils.bytesToLong(bytes), 1L);
   }
   
   @Test
@@ -70,6 +79,19 @@ public class TestUtils {
     bytes = new byte[] { 127, -8, 0, 0, 0, 0, 0, 0 };
     assertTrue(Double.isNaN(Utils.bytesToDouble(bytes)));
     assertArrayEquals(Utils.doubleToBytes(Double.NaN), bytes);
+    
+    bytes = new byte[] { 63, -16, 0, 0, 0, 0, 0, 0, 42, 42, 42 };
+    assertEquals(Utils.bytesToDouble(bytes), 1, 0.0001);
+  }
+  
+  @Test (expectedExceptions = NullPointerException.class)
+  public void bytesToLongNull() throws Exception {
+    Utils.bytesToLong(null);
+  }
+  
+  @Test (expectedExceptions = IndexOutOfBoundsException.class)
+  public void bytesToLongTooShort() throws Exception {
+    Utils.bytesToLong(new byte[] { 0, 0, 0, 0, 0, 0, 0 });
   }
   
   /**
