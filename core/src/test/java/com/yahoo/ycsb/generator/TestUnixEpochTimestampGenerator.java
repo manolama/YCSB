@@ -16,10 +16,9 @@
  */
 package com.yahoo.ycsb.generator;
 
-import static org.junit.Assert.assertEquals;
+import static org.testng.Assert.assertEquals;
 
 import java.util.concurrent.TimeUnit;
-
 import org.testng.annotations.Test;
 
 public class TestUnixEpochTimestampGenerator {
@@ -29,11 +28,11 @@ public class TestUnixEpochTimestampGenerator {
     final UnixEpochTimestampGenerator generator = 
         new UnixEpochTimestampGenerator();
     final long startTime = generator.currentValue();
-    assertEquals(startTime + 60, (long) generator.nextValue());
-    assertEquals(startTime, (long) generator.lastValue());
-    assertEquals(startTime + 120, (long) generator.nextValue());
-    assertEquals(startTime + 60, (long) generator.lastValue());
-    assertEquals(startTime + 180, (long) generator.nextValue());
+    assertEquals((long) generator.nextValue(), startTime + 60);
+    assertEquals((long) generator.lastValue(), startTime);
+    assertEquals((long) generator.nextValue(), startTime + 120);
+    assertEquals((long) generator.lastValue(), startTime + 60);
+    assertEquals((long) generator.nextValue(), startTime + 180);
   }
   
   @Test
@@ -41,20 +40,20 @@ public class TestUnixEpochTimestampGenerator {
     final UnixEpochTimestampGenerator generator = 
         new UnixEpochTimestampGenerator(120, TimeUnit.SECONDS);
     final long startTime = generator.currentValue();
-    assertEquals(startTime + 120, (long) generator.nextValue());
-    assertEquals(startTime, (long) generator.lastValue());
-    assertEquals(startTime + 240, (long) generator.nextValue());
-    assertEquals(startTime + 120, (long) generator.lastValue());
+    assertEquals((long) generator.nextValue(), startTime + 120);
+    assertEquals((long) generator.lastValue(), startTime);
+    assertEquals((long) generator.nextValue(), startTime + 240);
+    assertEquals((long) generator.lastValue(), startTime + 120);
   }
   
   @Test
   public void ctorWithIntervalAndUnitsAndStart() throws Exception {
     final UnixEpochTimestampGenerator generator = 
         new UnixEpochTimestampGenerator(120, TimeUnit.SECONDS, 1072915200L);
-    assertEquals(1072915200L, (long) generator.nextValue());
-    assertEquals(1072915200L - 120, (long) generator.lastValue());
-    assertEquals(1072915200L + 120, (long) generator.nextValue());
-    assertEquals(1072915200L, (long) generator.lastValue());
+    assertEquals((long) generator.nextValue(), 1072915200L);
+    assertEquals((long) generator.lastValue(), 1072915200L - 120);
+    assertEquals((long) generator.nextValue(), 1072915200L + 120);
+    assertEquals((long) generator.lastValue(), 1072915200L);
   }
   
   @Test
@@ -63,59 +62,59 @@ public class TestUnixEpochTimestampGenerator {
     UnixEpochTimestampGenerator generator = 
         new UnixEpochTimestampGenerator(-60, TimeUnit.SECONDS);
     long startTime = generator.currentValue();
-    assertEquals(startTime - 60, (long) generator.nextValue());
-    assertEquals(startTime, (long) generator.lastValue());
-    assertEquals(startTime - 120, (long) generator.nextValue());
-    assertEquals(startTime - 60, (long) generator.lastValue());
+    assertEquals((long) generator.nextValue(), startTime - 60);
+    assertEquals((long) generator.lastValue(), startTime);
+    assertEquals((long) generator.nextValue(), startTime - 120);
+    assertEquals((long) generator.lastValue(), startTime - 60);
     
     generator = new UnixEpochTimestampGenerator(100, TimeUnit.NANOSECONDS);
     startTime = generator.currentValue();
-    assertEquals(startTime + 100, (long) generator.nextValue());
-    assertEquals(startTime, (long) generator.lastValue());
-    assertEquals(startTime + 200, (long) generator.nextValue());
-    assertEquals(startTime + 100, (long) generator.lastValue());
+    assertEquals((long) generator.nextValue(), startTime + 100);
+    assertEquals((long) generator.lastValue(), startTime);
+    assertEquals((long) generator.nextValue(), startTime + 200);
+    assertEquals((long) generator.lastValue(), startTime + 100);
     
     generator = new UnixEpochTimestampGenerator(100, TimeUnit.MICROSECONDS);
     startTime = generator.currentValue();
-    assertEquals(startTime + 100, (long) generator.nextValue());
-    assertEquals(startTime, (long) generator.lastValue());
-    assertEquals(startTime + 200, (long) generator.nextValue());
-    assertEquals(startTime + 100, (long) generator.lastValue());
+    assertEquals((long) generator.nextValue(), startTime + 100);
+    assertEquals((long) generator.lastValue(), startTime);
+    assertEquals((long) generator.nextValue(), startTime + 200);
+    assertEquals((long) generator.lastValue(), startTime + 100);
     
     generator = new UnixEpochTimestampGenerator(100, TimeUnit.MILLISECONDS);
     startTime = generator.currentValue();
-    assertEquals(startTime + 100, (long) generator.nextValue());
-    assertEquals(startTime, (long) generator.lastValue());
-    assertEquals(startTime + 200, (long) generator.nextValue());
-    assertEquals(startTime + 100, (long) generator.lastValue());
+    assertEquals((long) generator.nextValue(), startTime + 100);
+    assertEquals((long) generator.lastValue(), startTime);
+    assertEquals((long) generator.nextValue(), startTime + 200);
+    assertEquals((long) generator.lastValue(), startTime + 100);
     
     generator = new UnixEpochTimestampGenerator(100, TimeUnit.SECONDS);
     startTime = generator.currentValue();
-    assertEquals(startTime + 100, (long) generator.nextValue());
-    assertEquals(startTime, (long) generator.lastValue());
-    assertEquals(startTime + 200, (long) generator.nextValue());
-    assertEquals(startTime + 100, (long) generator.lastValue());
+    assertEquals((long) generator.nextValue(), startTime + 100);
+    assertEquals((long) generator.lastValue(), startTime);
+    assertEquals((long) generator.nextValue(), startTime + 200);
+    assertEquals((long) generator.lastValue(), startTime + 100);
     
     generator = new UnixEpochTimestampGenerator(1, TimeUnit.MINUTES);
     startTime = generator.currentValue();
-    assertEquals(startTime + (1 * 60), (long) generator.nextValue());
-    assertEquals(startTime, (long) generator.lastValue());
-    assertEquals(startTime + (2 * 60), (long) generator.nextValue());
-    assertEquals(startTime + (1 * 60), (long) generator.lastValue());
+    assertEquals((long) generator.nextValue(), startTime + (1 * 60));
+    assertEquals((long) generator.lastValue(), startTime);
+    assertEquals((long) generator.nextValue(), startTime + (2 * 60));
+    assertEquals((long) generator.lastValue(), startTime + (1 * 60));
     
     generator = new UnixEpochTimestampGenerator(1, TimeUnit.HOURS);
     startTime = generator.currentValue();
-    assertEquals(startTime + (1 * 60 * 60), (long) generator.nextValue());
-    assertEquals(startTime, (long) generator.lastValue());
-    assertEquals(startTime + (2 * 60 * 60), (long) generator.nextValue());
-    assertEquals(startTime + (1 * 60 * 60), (long) generator.lastValue());
+    assertEquals((long) generator.nextValue(), startTime + (1 * 60 * 60));
+    assertEquals((long) generator.lastValue(), startTime);
+    assertEquals((long) generator.nextValue(), startTime + (2 * 60 * 60));
+    assertEquals((long) generator.lastValue(), startTime + (1 * 60 * 60));
     
     generator = new UnixEpochTimestampGenerator(1, TimeUnit.DAYS);
     startTime = generator.currentValue();
-    assertEquals(startTime + (1 * 60 * 60 * 24), (long) generator.nextValue());
-    assertEquals(startTime, (long) generator.lastValue());
-    assertEquals(startTime + (2 * 60 * 60 * 24), (long) generator.nextValue());
-    assertEquals(startTime + (1 * 60 * 60 * 24), (long) generator.lastValue());
+    assertEquals((long) generator.nextValue(), startTime + (1 * 60 * 60 * 24));
+    assertEquals((long) generator.lastValue(), startTime);
+    assertEquals((long) generator.nextValue(), startTime + (2 * 60 * 60 * 24));
+    assertEquals((long) generator.lastValue(), startTime + (1 * 60 * 60 * 24));
   }
   
   // TODO - With PowerMockito we could UT the initializeTimestamp(long) call.

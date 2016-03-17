@@ -1,18 +1,18 @@
-/**                                                                                                                                                                                
- * Copyright (c) 2016 Yahoo! Inc. All rights reserved.                                                                                                                             
- *                                                                                                                                                                                 
- * Licensed under the Apache License, Version 2.0 (the "License"); you                                                                                                             
- * may not use this file except in compliance with the License. You                                                                                                                
- * may obtain a copy of the License at                                                                                                                                             
- *                                                                                                                                                                                 
- * http://www.apache.org/licenses/LICENSE-2.0                                                                                                                                      
- *                                                                                                                                                                                 
- * Unless required by applicable law or agreed to in writing, software                                                                                                             
- * distributed under the License is distributed on an "AS IS" BASIS,                                                                                                               
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or                                                                                                                 
- * implied. See the License for the specific language governing                                                                                                                    
- * permissions and limitations under the License. See accompanying                                                                                                                 
- * LICENSE file.                                                                                                                                                                   
+/**
+ * Copyright (c) 2016 Yahoo! Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
  */
 
 package com.yahoo.ycsb.generator;
@@ -42,27 +42,27 @@ import java.util.concurrent.TimeUnit;
  * threads.
  */
 public class UnixEpochTimestampGenerator extends Generator<Long> {
-  /** Name and default value for the timestamp interval property */
+  /** Name and default value for the timestamp interval property. */
   public static final String TIMESTAMP_INTERVAL_PROPERTY = "timestamp_interval";
   public static final String TIMESTAMP_INTERVAL_PROPERTY_DEFAULT = "60";
   
-  /** Name and default value for the timestamp units property */
+  /** Name and default value for the timestamp units property. */
   public static final String TIMESTAMP_UNITS_PROPERTY = "timestamp_units";
   public static final String TIMESTAMP_UNITS_PROPERTY_DEFAULT = "SECONDS";
   
-  /** Name for the optional starting timestamp property */
+  /** Name for the optional starting timestamp property. */
   public static final String TIMESTAMP_START_PROPERTY = "start_timestamp";
   
-  /** The current timestamp that will be incremented */
+  /** The current timestamp that will be incremented. */
   private long currentTimestamp;
   
-  /** The last used timestamp. Should always be one interval behind current */
+  /** The last used timestamp. Should always be one interval behind current. */
   private long lastTimestamp;
   
-  /** The interval to increment by. Multiplied by {@link #timeUnits} */
+  /** The interval to increment by. Multiplied by {@link #timeUnits}. */
   private long interval;
   
-  /** The units of time the interval represents */
+  /** The units of time the interval represents. */
   private TimeUnit timeUnits;
   
   /**
@@ -115,33 +115,33 @@ public class UnixEpochTimestampGenerator extends Generator<Long> {
    */
   public void initalizeTimestamp(final long intervalOffset) {
     switch (timeUnits) {
-      case NANOSECONDS:
-        currentTimestamp = System.nanoTime() + getOffset(intervalOffset);
-        break;
-      case MICROSECONDS:
-        currentTimestamp = (System.nanoTime() / 1000) + getOffset(intervalOffset);
-        break;
-      case MILLISECONDS:
-        currentTimestamp = System.currentTimeMillis() + getOffset(intervalOffset);
-        break;
-      case SECONDS:
-        currentTimestamp = (System.currentTimeMillis() / 1000) + 
-            getOffset(intervalOffset);
-        break;
-      case MINUTES:
-        currentTimestamp = (System.currentTimeMillis() / 1000) + 
-            getOffset(intervalOffset);
-        break;
-      case HOURS:
-        currentTimestamp = (System.currentTimeMillis() / 1000) + 
-            getOffset(intervalOffset);
-        break;
-      case DAYS:
-        currentTimestamp = (System.currentTimeMillis() / 1000) + 
-            getOffset(intervalOffset);
-        break;
-      default:
-        throw new IllegalArgumentException("Unhandled time unit type: " + timeUnits);
+    case NANOSECONDS:
+      currentTimestamp = System.nanoTime() + getOffset(intervalOffset);
+      break;
+    case MICROSECONDS:
+      currentTimestamp = (System.nanoTime() / 1000) + getOffset(intervalOffset);
+      break;
+    case MILLISECONDS:
+      currentTimestamp = System.currentTimeMillis() + getOffset(intervalOffset);
+      break;
+    case SECONDS:
+      currentTimestamp = (System.currentTimeMillis() / 1000) + 
+          getOffset(intervalOffset);
+      break;
+    case MINUTES:
+      currentTimestamp = (System.currentTimeMillis() / 1000) + 
+          getOffset(intervalOffset);
+      break;
+    case HOURS:
+      currentTimestamp = (System.currentTimeMillis() / 1000) + 
+          getOffset(intervalOffset);
+      break;
+    case DAYS:
+      currentTimestamp = (System.currentTimeMillis() / 1000) + 
+          getOffset(intervalOffset);
+      break;
+    default:
+      throw new IllegalArgumentException("Unhandled time unit type: " + timeUnits);
     }
   }
   
@@ -159,19 +159,19 @@ public class UnixEpochTimestampGenerator extends Generator<Long> {
    */
   public long getOffset(final long intervalOffset) {
     switch (timeUnits) {
-      case NANOSECONDS:
-      case MICROSECONDS:
-      case MILLISECONDS:
-      case SECONDS:
-        return intervalOffset * interval; 
-      case MINUTES:
-        return intervalOffset * interval * (long) 60;
-      case HOURS:
-        return intervalOffset * interval * (long) (60 * 60);
-      case DAYS:
-        return intervalOffset * interval * (long) (60 * 60 * 24);
-      default:
-        throw new IllegalArgumentException("Unhandled time unit type: " + timeUnits);
+    case NANOSECONDS:
+    case MICROSECONDS:
+    case MILLISECONDS:
+    case SECONDS:
+      return intervalOffset * interval; 
+    case MINUTES:
+      return intervalOffset * interval * (long) 60;
+    case HOURS:
+      return intervalOffset * interval * (long) (60 * 60);
+    case DAYS:
+      return intervalOffset * interval * (long) (60 * 60 * 24);
+    default:
+      throw new IllegalArgumentException("Unhandled time unit type: " + timeUnits);
     }
   }
   
