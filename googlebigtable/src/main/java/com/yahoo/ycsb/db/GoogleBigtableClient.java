@@ -9,6 +9,8 @@ import java.util.Map.Entry;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.AbstractBigtableConnection;
@@ -16,9 +18,15 @@ import org.apache.hadoop.hbase.client.BufferedMutator;
 import org.apache.hadoop.hbase.client.BufferedMutatorParams;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import java.util.Set;
@@ -36,6 +44,7 @@ import com.google.cloud.bigtable.grpc.BigtableSession;
 import com.google.cloud.bigtable.hbase.BatchExecutor;
 import com.google.cloud.bigtable.hbase.BigtableOptionsFactory;
 import com.google.common.base.Preconditions;
+import com.yahoo.ycsb.ByteArrayByteIterator;
 import com.yahoo.ycsb.ByteIterator;
 import com.yahoo.ycsb.DBException;
 import com.yahoo.ycsb.Status;
@@ -127,15 +136,149 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   @Override
   public Status read(String table, String key, Set<String> fields,
       HashMap<String, ByteIterator> result) {
-    // TODO Auto-generated method stub
-    return null;
+    if (useHTableInterface) {
+      // if this is a "new" table, init HTable object. Else, use existing one
+      if (!tableName.equals(table)) {
+        currentTable = null;
+        try {
+          getHTable(table);
+          tableName = table;
+        } catch (IOException e) {
+          System.err.println("Error accessing HBase table: " + e);
+          return Status.ERROR;
+        }
+      }
+      
+      Result r = null;
+      try {
+        if (debug) {
+          System.out
+              .println("Doing read from HBase columnfamily " + new String(columnFamilyBytes));
+          System.out.println("Doing read for key: " + key);
+        }
+        Get g = new Get(Bytes.toBytes(key));
+        if (fields == null) {
+          g.addFamily(columnFamilyBytes);
+        } else {
+          for (String field : fields) {
+            g.addColumn(columnFamilyBytes, Bytes.toBytes(field));
+          }
+        }
+        r = currentTable.get(g);
+      } catch (IOException e) {
+        if (debug) {
+          System.err.println("Error doing get: " + e);
+        }
+        return Status.ERROR;
+      } catch (ConcurrentModificationException e) {
+        // do nothing for now...need to understand HBase concurrency model better
+        return Status.ERROR;
+      }
+
+      if (r.isEmpty()) {
+        return Status.NOT_FOUND;
+      }
+
+      while (r.advance()) {
+        final Cell c = r.current();
+        result.put(Bytes.toString(CellUtil.cloneQualifier(c)),
+            new ByteArrayByteIterator(CellUtil.cloneValue(c)));
+        if (debug) {
+          System.out.println(
+              "Result for field: " + Bytes.toString(CellUtil.cloneQualifier(c))
+                  + " is: " + Bytes.toString(CellUtil.cloneValue(c)));
+        }
+      }
+      return Status.OK;
+    } else {
+      // TODO - native
+      return Status.NOT_IMPLEMENTED;
+    }
   }
 
   @Override
   public Status scan(String table, String startkey, int recordcount,
       Set<String> fields, Vector<HashMap<String, ByteIterator>> result) {
-    // TODO Auto-generated method stub
-    return null;
+    if (useHTableInterface) {
+      // if this is a "new" table, init HTable object. Else, use existing one
+      if (!tableName.equals(table)) {
+        currentTable = null;
+        try {
+          getHTable(table);
+          tableName = table;
+        } catch (IOException e) {
+          System.err.println("Error accessing HBase table: " + e);
+          return Status.ERROR;
+        }
+      }
+      
+      Scan s = new Scan(Bytes.toBytes(startkey));
+      // HBase has no record limit. Here, assume recordcount is small enough to
+      // bring back in one call.
+      // We get back recordcount records
+      s.setCaching(recordcount);
+      if (this.usePageFilter) {
+        s.setFilter(new PageFilter(recordcount));
+      }
+
+      // add specified fields or else all fields
+      if (fields == null) {
+        s.addFamily(columnFamilyBytes);
+      } else {
+        for (String field : fields) {
+          s.addColumn(columnFamilyBytes, Bytes.toBytes(field));
+        }
+      }
+
+      // get results
+      ResultScanner scanner = null;
+      try {
+        scanner = currentTable.getScanner(s);
+        int numResults = 0;
+        for (Result rr = scanner.next(); rr != null; rr = scanner.next()) {
+          // get row key
+          String key = Bytes.toString(rr.getRow());
+
+          if (debug) {
+            System.out.println("Got scan result for key: " + key);
+          }
+
+          HashMap<String, ByteIterator> rowResult =
+              new HashMap<String, ByteIterator>();
+
+          while (rr.advance()) {
+            final Cell cell = rr.current();
+            rowResult.put(Bytes.toString(CellUtil.cloneQualifier(cell)),
+                new ByteArrayByteIterator(CellUtil.cloneValue(cell)));
+          }
+
+          // add rowResult to result vector
+          result.add(rowResult);
+          numResults++;
+
+          // PageFilter does not guarantee that the number of results is <=
+          // pageSize, so this
+          // break is required.
+          if (numResults >= recordcount) {// if hit recordcount, bail out
+            break;
+          }
+        } // done with row
+      } catch (IOException e) {
+        if (debug) {
+          System.out.println("Error in getting/parsing scan result: " + e);
+        }
+        return Status.ERROR;
+      } finally {
+        if (scanner != null) {
+          scanner.close();
+        }
+      }
+
+      return Status.OK;
+    } else {
+      // TODO - native
+      return Status.NOT_IMPLEMENTED;
+    }
   }
 
   @Override
@@ -221,8 +364,43 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
 
   @Override
   public Status delete(String table, String key) {
-    // TODO Auto-generated method stub
-    return null;
+    if (useHTableInterface) {
+      // if this is a "new" table, init HTable object. Else, use existing one
+      if (!tableName.equals(table)) {
+        currentTable = null;
+        try {
+          getHTable(table);
+          tableName = table;
+        } catch (IOException e) {
+          System.err.println("Error accessing HBase table: " + e);
+          return Status.ERROR;
+        }
+      }
+
+      if (debug) {
+        System.out.println("Doing delete for key: " + key);
+      }
+
+      final Delete d = new Delete(Bytes.toBytes(key));
+      d.setDurability(durability);
+      try {
+        if (clientSideBuffering) {
+          Preconditions.checkNotNull(bufferedMutator);
+          bufferedMutator.mutate(d);
+        } else {
+          currentTable.delete(d);
+        }
+        return Status.OK;
+      } catch (IOException e) {
+        if (debug) {
+          System.err.println("Error doing delete: " + e);
+        }
+        return Status.ERROR;
+      }
+    } else {
+      // TODO - native
+      return Status.NOT_IMPLEMENTED;
+    }
   }
 
   /**

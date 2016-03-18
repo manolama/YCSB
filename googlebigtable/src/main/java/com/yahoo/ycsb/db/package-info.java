@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Yahoo!, Inc. All rights reserved.
+ * Copyright (c) 2016, Yahoo!, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -16,8 +16,8 @@
  */
 
 /**
- * The YCSB binding for <a href="http://opentsdb.net/">OpenTSDB</a> 
- * using the HTTP API.
+ * The YCSB binding for Google's <a href="https://cloud.google.com/bigtable/">
+ * Bigtable</a>.
  */
 package com.yahoo.ycsb.db;
 
