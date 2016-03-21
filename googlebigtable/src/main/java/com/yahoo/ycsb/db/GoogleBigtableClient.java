@@ -37,12 +37,18 @@ import com.google.bigtable.repackaged.com.google.protobuf.ByteString;
 import com.google.bigtable.repackaged.com.google.protobuf.ServiceException;
 import com.google.bigtable.v1.MutateRowRequest;
 import com.google.bigtable.v1.Mutation;
+import com.google.bigtable.v1.ReadRowsRequest;
+import com.google.bigtable.v1.Row;
+import com.google.bigtable.v1.RowFilter;
 import com.google.bigtable.v1.Mutation.SetCell;
+import com.google.bigtable.v1.RowFilter.Chain;
+import com.google.bigtable.v1.RowFilter.Interleave.Builder;
 import com.google.cloud.bigtable.config.BigtableOptions;
 import com.google.cloud.bigtable.grpc.BigtableDataClient;
 import com.google.cloud.bigtable.grpc.BigtableSession;
 import com.google.cloud.bigtable.hbase.BatchExecutor;
 import com.google.cloud.bigtable.hbase.BigtableOptionsFactory;
+import com.google.cloud.bigtable.util.ByteStringer;
 import com.google.common.base.Preconditions;
 import com.yahoo.ycsb.ByteArrayByteIterator;
 import com.yahoo.ycsb.ByteIterator;
@@ -192,6 +198,27 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       return Status.OK;
     } else {
       // TODO - native
+      RowFilter filter = RowFilter.newBuilder()
+          .setFamilyNameRegexFilterBytes(ByteStringer.wrap(columnFamilyBytes))
+          .build();
+      if (fields != null && fields.size() > 0) {
+        Builder filterChain = RowFilter.Interleave.newBuilder();
+        filterChain.addFilters(filter);
+        for (final String field : fields) {
+          filterChain.addFilters(RowFilter.newBuilder()
+              .setColumnQualifierRegexFilter(
+                  ByteStringer.wrap(field.getBytes()))).build();
+        }
+        
+        filter = RowFilter.newBuilder().setInterleave(filterChain.build()).build();
+      }
+      
+      final ReadRowsRequest.Builder rrr = ReadRowsRequest.newBuilder()
+          .setFilter(filter)
+          .setRowKey(ByteString.copyFrom(key.getBytes()));
+      
+      com.google.cloud.bigtable.grpc.scanner.ResultScanner<Row> row = client.readRows(rrr.build());
+      
       return Status.NOT_IMPLEMENTED;
     }
   }
@@ -331,6 +358,8 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       return Status.OK;
     } else {
       setTable(table);
+      
+      // TODO - async/buffered
       
       final MutateRowRequest.Builder rowMutation = MutateRowRequest.newBuilder();
       rowMutation.setRowKey(ByteString.copyFromUtf8(key));
