@@ -48,7 +48,7 @@ public class TestTimeseriesWorkload {
   @Test
   public void badTimeUnit() throws Exception {
     final Properties p = new Properties();
-    p.put(UnixEpochTimestampGenerator.TIMESTAMP_UNITS_PROPERTY, "foobar");
+    p.put(TimeseriesWorkload.TIMESTAMP_UNITS_PROPERTY, "foobar");
     final TimeseriesWorkload wl = new TimeseriesWorkload();
     wl.init(p);
   }

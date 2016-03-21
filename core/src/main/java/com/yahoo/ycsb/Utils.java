@@ -177,6 +177,8 @@ public class Utils
        */
       public static byte[] doubleToBytes(final double val) {
         return longToBytes(Double.doubleToRawLongBits(val));
+      }
+      
       /**
        * Set of all character types that include every symbol other than non-printable
        * control characters.

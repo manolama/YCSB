@@ -19,6 +19,18 @@ import com.yahoo.ycsb.generator.OrderedPrintableStringGenerator;
 import com.yahoo.ycsb.generator.UnixEpochTimestampGenerator;
 
 public class TimeseriesWorkload extends Workload {  
+  /** Name and default value for the timestamp interval property. */    
+  public static final String TIMESTAMP_INTERVAL_PROPERTY = "timestamp_interval";    
+  public static final String TIMESTAMP_INTERVAL_PROPERTY_DEFAULT = "60";    
+      
+  /** Name and default value for the timestamp units property. */   
+  public static final String TIMESTAMP_UNITS_PROPERTY = "timestamp_units";    
+  public static final String TIMESTAMP_UNITS_PROPERTY_DEFAULT = "SECONDS";    
+      
+  /** Name for the optional starting timestamp property. */   
+  public static final String TIMESTAMP_START_PROPERTY = "start_timestamp";    
+     
+  
   public static final String TAG_COUNT_PROPERTY = "tag_count";
   public static final String TAG_COUNT_PROPERTY_DEFAULT = "4";
   
@@ -118,16 +130,16 @@ public class TimeseriesWorkload extends Workload {
     
     try {
       timestampInterval = Integer.parseInt(p.getProperty(
-          UnixEpochTimestampGenerator.TIMESTAMP_INTERVAL_PROPERTY, UnixEpochTimestampGenerator.TIMESTAMP_INTERVAL_PROPERTY_DEFAULT));
+          TIMESTAMP_INTERVAL_PROPERTY, TIMESTAMP_INTERVAL_PROPERTY_DEFAULT));
     } catch (NumberFormatException nfe) {
       throw new WorkloadException("Unable to parse the " + 
-          UnixEpochTimestampGenerator.TIMESTAMP_INTERVAL_PROPERTY, nfe);
+          TIMESTAMP_INTERVAL_PROPERTY, nfe);
     }
     
     try {
       
-      timeUnits = TimeUnit.valueOf(p.getProperty(UnixEpochTimestampGenerator.TIMESTAMP_UNITS_PROPERTY, 
-          UnixEpochTimestampGenerator.TIMESTAMP_UNITS_PROPERTY_DEFAULT).toUpperCase());
+      timeUnits = TimeUnit.valueOf(p.getProperty(TIMESTAMP_UNITS_PROPERTY, 
+          TIMESTAMP_UNITS_PROPERTY_DEFAULT).toUpperCase());
     } catch (IllegalArgumentException e) {
       throw new WorkloadException("Unknown time unit type", e);
     }
@@ -136,7 +148,7 @@ public class TimeseriesWorkload extends Workload {
           " at this time.");
     }
     final String startingTimestamp = 
-        p.getProperty(UnixEpochTimestampGenerator.TIMESTAMP_START_PROPERTY);
+        p.getProperty(TIMESTAMP_START_PROPERTY);
     if (startingTimestamp == null || startingTimestamp.isEmpty()) {
       timestampGenerator = new UnixEpochTimestampGenerator(timestampInterval, timeUnits);
     } else {
@@ -145,7 +157,7 @@ public class TimeseriesWorkload extends Workload {
             Long.parseLong(startingTimestamp));
       } catch (NumberFormatException nfe) {
         throw new WorkloadException("Unable to parse the " + 
-            UnixEpochTimestampGenerator.TIMESTAMP_START_PROPERTY, nfe);
+            TIMESTAMP_START_PROPERTY, nfe);
       }
     }
   }

@@ -142,6 +142,7 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   @Override
   public Status read(String table, String key, Set<String> fields,
       HashMap<String, ByteIterator> result) {
+    System.out.println("READING FROM BT!!");
     if (useHTableInterface) {
       // if this is a "new" table, init HTable object. Else, use existing one
       if (!tableName.equals(table)) {
@@ -218,7 +219,7 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
           .setRowKey(ByteString.copyFrom(key.getBytes()));
       
       com.google.cloud.bigtable.grpc.scanner.ResultScanner<Row> row = client.readRows(rrr.build());
-      
+      System.out.println("Read row: " + row);
       return Status.NOT_IMPLEMENTED;
     }
   }
