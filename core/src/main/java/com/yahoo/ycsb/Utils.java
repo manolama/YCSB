@@ -1,5 +1,5 @@
 /**                                                                                                                                                                                
- * Copyright (c) 2010 Yahoo! Inc. All rights reserved.                                                                                                                             
+ * Copyright (c) 2010 Yahoo! Inc., 2016 YCSB contributors. All rights reserved.                                                                                                                             
  *                                                                                                                                                                                 
  * Licensed under the Apache License, Version 2.0 (the "License"); you                                                                                                             
  * may not use this file except in compliance with the License. You                                                                                                                
@@ -123,6 +123,7 @@ public class Utils
        * @param bytes The array to read from.
        * @return A long integer.
        * @throws IndexOutOfBoundsException if the byte array is too small.
+       * @throws NullPointerException if the byte array is null.
        */
       public static long bytesToLong(final byte[] bytes) {
         return (bytes[0] & 0xFFL) << 56
@@ -137,7 +138,7 @@ public class Utils
       
       /**
        * Writes a big-endian 8-byte long at an offset in the given array.
-       * @param val The value to encode
+       * @param val The value to encode.
        * @throws IndexOutOfBoundsException if the byte array is too small.
        */
       public static byte[] longToBytes(final long val) {
@@ -155,28 +156,27 @@ public class Utils
       
       /**
        * Parses the byte array into a double.
-       * The byte array MUST be 8 bytes long and have been encoded using 
-       * {@link #doubleToBytes}
-       * @param bytes The byte array to parse, at least 8 bytes
-       * @return A double value read from the byte array
-       * @throws IllegalArgumentException if the byte array is not 8 bytes wide
+       * The byte array must be at least 8 bytes long and have been encoded using 
+       * {@link #doubleToBytes}. If the array is longer than 8 bytes, only the
+       * first 8 bytes are parsed.
+       * @param bytes The byte array to parse, at least 8 bytes.
+       * @return A double value read from the byte array.
+       * @throws IllegalArgumentException if the byte array is not 8 bytes wide.
        */
       public static double bytesToDouble(final byte[] bytes) {
-        if (bytes.length != 8) {
+        if (bytes.length < 8) {
           throw new IllegalArgumentException("Byte array must be 8 bytes wide.");
         }
         return Double.longBitsToDouble(bytesToLong(bytes));
       }
       
       /**
-       * Encodes the double value as an 8 byte array 
-       * @param val The double value to encode
-       * @return A byte array of length 8
+       * Encodes the double value as an 8 byte array.
+       * @param val The double value to encode.
+       * @return A byte array of length 8.
        */
       public static byte[] doubleToBytes(final double val) {
         return longToBytes(Double.doubleToRawLongBits(val));
-      }
-
       /**
        * Set of all character types that include every symbol other than non-printable
        * control characters.

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016 Yahoo! Inc. All rights reserved.
+ * Copyright (c) 2016 YCSB contributors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -42,16 +42,6 @@ import java.util.concurrent.TimeUnit;
  * threads.
  */
 public class UnixEpochTimestampGenerator extends Generator<Long> {
-  /** Name and default value for the timestamp interval property. */
-  public static final String TIMESTAMP_INTERVAL_PROPERTY = "timestamp_interval";
-  public static final String TIMESTAMP_INTERVAL_PROPERTY_DEFAULT = "60";
-  
-  /** Name and default value for the timestamp units property. */
-  public static final String TIMESTAMP_UNITS_PROPERTY = "timestamp_units";
-  public static final String TIMESTAMP_UNITS_PROPERTY_DEFAULT = "SECONDS";
-  
-  /** Name for the optional starting timestamp property. */
-  public static final String TIMESTAMP_START_PROPERTY = "start_timestamp";
   
   /** The current timestamp that will be incremented. */
   private long currentTimestamp;
