@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
@@ -31,10 +32,13 @@ import org.apache.hadoop.hbase.util.Bytes;
 
 import java.util.Set;
 import java.util.Vector;
+import java.util.concurrent.ExecutionException;
 
 import com.google.bigtable.repackaged.com.google.protobuf.BigtableZeroCopyByteStringUtil;
 import com.google.bigtable.repackaged.com.google.protobuf.ByteString;
 import com.google.bigtable.repackaged.com.google.protobuf.ServiceException;
+import com.google.bigtable.v1.Column;
+import com.google.bigtable.v1.Family;
 import com.google.bigtable.v1.MutateRowRequest;
 import com.google.bigtable.v1.Mutation;
 import com.google.bigtable.v1.ReadRowsRequest;
@@ -72,11 +76,12 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   private BigtableOptions options;
   
   private byte[] columnFamilyBytes = "cf".getBytes();
+  private ByteString cfByteString = ByteString.copyFrom(columnFamilyBytes);
   
   private String lastTable = "";
   private byte[] lastTableBytes;
   
-  private boolean useHTableInterface = true;
+  private boolean useHTableInterface = false;
   
   /**
    * Durability to use for puts and deletes.
@@ -142,7 +147,7 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   @Override
   public Status read(String table, String key, Set<String> fields,
       HashMap<String, ByteIterator> result) {
-    System.out.println("READING FROM BT!!");
+
     if (useHTableInterface) {
       // if this is a "new" table, init HTable object. Else, use existing one
       if (!tableName.equals(table)) {
@@ -198,6 +203,8 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       }
       return Status.OK;
     } else {
+      setTable(table);
+      
       // TODO - native
       RowFilter filter = RowFilter.newBuilder()
           .setFamilyNameRegexFilterBytes(ByteStringer.wrap(columnFamilyBytes))
@@ -215,12 +222,42 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       }
       
       final ReadRowsRequest.Builder rrr = ReadRowsRequest.newBuilder()
+          .setTableNameBytes(
+              BigtableZeroCopyByteStringUtil.wrap(lastTableBytes))
           .setFilter(filter)
           .setRowKey(ByteString.copyFrom(key.getBytes()));
       
-      com.google.cloud.bigtable.grpc.scanner.ResultScanner<Row> row = client.readRows(rrr.build());
-      System.out.println("Read row: " + row);
-      return Status.NOT_IMPLEMENTED;
+      // TODO - async
+      List<Row> rows;
+      try {
+        rows = client.readRowsAsync(rrr.build()).get();
+        if (rows == null || rows.isEmpty()) {
+          return Status.NOT_FOUND;
+        }
+        
+        for (final Row row : rows) {
+          for (final Family family : row.getFamiliesList()) {
+            // TODO - is this the same?
+            if (family.getNameBytes().equals(cfByteString)) {
+              for (final Column column : family.getColumnsList()) {
+                // we only care about the first cell in each column
+                result.put(column.getQualifier().toString(), 
+                    new ByteArrayByteIterator(column.getCells(0).toByteArray()));
+              }
+            }
+          }
+        }
+        
+        return Status.OK;
+      } catch (InterruptedException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+        return Status.ERROR;
+      } catch (ExecutionException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+        return Status.ERROR;
+      }
     }
   }
 
