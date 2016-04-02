@@ -1,6 +1,8 @@
 package com.yahoo.ycsb.db;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.util.Arrays;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -34,6 +36,11 @@ import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.ExecutionException;
 
+import javax.management.InstanceNotFoundException;
+import javax.management.MBeanServerNotification;
+import javax.management.Notification;
+import javax.management.NotificationListener;
+
 import com.google.bigtable.repackaged.com.google.protobuf.BigtableZeroCopyByteStringUtil;
 import com.google.bigtable.repackaged.com.google.protobuf.ByteString;
 import com.google.bigtable.repackaged.com.google.protobuf.ServiceException;
@@ -46,7 +53,7 @@ import com.google.bigtable.v1.Row;
 import com.google.bigtable.v1.RowFilter;
 import com.google.bigtable.v1.Mutation.SetCell;
 import com.google.bigtable.v1.RowFilter.Chain;
-import com.google.bigtable.v1.RowFilter.Interleave.Builder;
+import com.google.bigtable.v1.RowFilter.Chain.Builder;
 import com.google.cloud.bigtable.config.BigtableOptions;
 import com.google.cloud.bigtable.grpc.BigtableDataClient;
 import com.google.cloud.bigtable.grpc.BigtableSession;
@@ -99,6 +106,8 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   private boolean clientSideBuffering = true;
   private long writeBufferSize = 1024 * 1024 * 12;
   
+  NotificationListener printListener;
+  
   @Override
   public void init() throws DBException {
     Properties props = getProperties();
@@ -125,6 +134,34 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       
       client = session.getDataClient();
     }
+    
+    printListener = new NotificationListener() {
+      public void handleNotification(Notification n, Object handback) {
+          if (!(n instanceof MBeanServerNotification)) {
+              System.out.println("Ignored notification of class " + n.getClass().getName());
+              return;
+          }
+          MBeanServerNotification mbsn = (MBeanServerNotification) n;
+          String what;
+          if (n.getType().equals(MBeanServerNotification.REGISTRATION_NOTIFICATION))
+              what = "MBean registered";
+          else if (n.getType().equals(MBeanServerNotification.UNREGISTRATION_NOTIFICATION))
+              what = "MBean unregistered";
+          else
+              what = "Unknown type " + n.getType();
+          System.out.println("Received MBean Server notification: " + what + ": " +
+                  mbsn.getMBeanName());
+      }
+  };
+  
+//  try {
+//    ManagementFactory.getPlatformMBeanServer().addNotificationListener(
+//        ManagementFactory.RUNTIME_MXBEAN_NAME, printListener, null, null);
+//    
+//  } catch (InstanceNotFoundException e) {
+//    // TODO Auto-generated catch block
+//    e.printStackTrace();
+//  }
   }
   
   @Override
@@ -205,20 +242,25 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
     } else {
       setTable(table);
       
-      // TODO - native
       RowFilter filter = RowFilter.newBuilder()
           .setFamilyNameRegexFilterBytes(ByteStringer.wrap(columnFamilyBytes))
           .build();
       if (fields != null && fields.size() > 0) {
-        Builder filterChain = RowFilter.Interleave.newBuilder();
+        Builder filterChain = RowFilter.Chain.newBuilder();
         filterChain.addFilters(filter);
+        int count = 0;
+        // usually "field#" so pre-alloc
+        final StringBuilder regex = new StringBuilder(fields.size() * 6);
         for (final String field : fields) {
-          filterChain.addFilters(RowFilter.newBuilder()
-              .setColumnQualifierRegexFilter(
-                  ByteStringer.wrap(field.getBytes()))).build();
+          if (count++ > 0) {
+            regex.append("|");
+          }
+          regex.append(field);
         }
-        
-        filter = RowFilter.newBuilder().setInterleave(filterChain.build()).build();
+        filterChain.addFilters(RowFilter.newBuilder()
+            .setColumnQualifierRegexFilter(
+                ByteStringer.wrap(regex.toString().getBytes()))).build();
+        filter = RowFilter.newBuilder().setChain(filterChain.build()).build();
       }
       
       final ReadRowsRequest.Builder rrr = ReadRowsRequest.newBuilder()
@@ -234,15 +276,20 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
         if (rows == null || rows.isEmpty()) {
           return Status.NOT_FOUND;
         }
-        
+        //System.out.println("Got rows: " + rows);
         for (final Row row : rows) {
           for (final Family family : row.getFamiliesList()) {
             // TODO - is this the same?
-            if (family.getNameBytes().equals(cfByteString)) {
+            if (Arrays.equals(family.getNameBytes().toByteArray(), columnFamilyBytes)) {
               for (final Column column : family.getColumnsList()) {
                 // we only care about the first cell in each column
-                result.put(column.getQualifier().toString(), 
-                    new ByteArrayByteIterator(column.getCells(0).toByteArray()));
+                result.put(Bytes.toString(column.getQualifier().toByteArray()), 
+                    new ByteArrayByteIterator(column.getCells(0).getValue().toByteArray()));
+                if (debug) {
+                  System.out.println(
+                      "Result for field: " + Bytes.toString(column.getQualifier().toByteArray())
+                          + " is: " + Bytes.toString(column.getCells(0).getValue().toByteArray()));
+                }
               }
             }
           }

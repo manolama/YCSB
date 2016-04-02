@@ -1,6 +1,15 @@
 package com.yahoo.ycsb;
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
+import java.util.Hashtable;
 import java.util.List;
+
+import javax.management.InstanceNotFoundException;
+import javax.management.MBeanServerNotification;
+import javax.management.MalformedObjectNameException;
+import javax.management.Notification;
+import javax.management.NotificationListener;
+import javax.management.ObjectName;
 
 import com.yahoo.ycsb.generator.ConstantIntegerGenerator;
 import com.yahoo.ycsb.generator.CounterGenerator;
@@ -15,7 +24,8 @@ import com.yahoo.ycsb.generator.UniformIntegerGenerator;
 public class YCSBSCRATCH {
 
   public static void main(String[] args) {
-    randomPrintableStringGenerator();
+    beano();
+    //randomPrintableStringGenerator();
     //stringByteIterator();
     //uniformGenerator();
     //scrambledZipfianGenerator();
@@ -25,6 +35,46 @@ public class YCSBSCRATCH {
     //uniformIntegerGenerator();
     //discreteGenerator();
     //constantIntegerGenerator();
+  }
+  
+  static void beano() {
+    NotificationListener printListener = new NotificationListener() {
+      public void handleNotification(Notification n, Object handback) {
+          if (!(n instanceof MBeanServerNotification)) {
+              System.out.println("Ignored notification of class " + n.getClass().getName());
+              return;
+          }
+          MBeanServerNotification mbsn = (MBeanServerNotification) n;
+          String what;
+          if (n.getType().equals(MBeanServerNotification.REGISTRATION_NOTIFICATION))
+              what = "MBean registered";
+          else if (n.getType().equals(MBeanServerNotification.UNREGISTRATION_NOTIFICATION))
+              what = "MBean unregistered";
+          else
+              what = "Unknown type " + n.getType();
+          System.out.println("Received MBean Server notification: " + what + ": " +
+                  mbsn.getMBeanName());
+      }
+  };
+  
+    try {
+      ObjectName on = ManagementFactory.getGarbageCollectorMXBeans().get(0).getObjectName();
+      System.out.println("Domain: " + on.toString());
+      Hashtable<String,String> table = new Hashtable<String, String>();
+      table.put("type", "GarbageCollector");
+      table.put("name", "*");
+      ObjectName on2 = new ObjectName("java.lang", table);
+    ManagementFactory.getPlatformMBeanServer().addNotificationListener(
+        on2, printListener, null, null);
+    } catch (MalformedObjectNameException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
+
+ catch (InstanceNotFoundException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
   }
   
   static void testCharSets() {
