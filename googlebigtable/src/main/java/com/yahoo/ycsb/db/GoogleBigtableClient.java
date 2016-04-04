@@ -1,7 +1,7 @@
 package com.yahoo.ycsb.db;
 
 import java.io.IOException;
-import java.lang.management.ManagementFactory;
+import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
@@ -16,7 +16,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.AbstractBigtableConnection;
 import org.apache.hadoop.hbase.client.BufferedMutator;
 import org.apache.hadoop.hbase.client.BufferedMutatorParams;
 import org.apache.hadoop.hbase.client.Connection;
@@ -36,12 +35,6 @@ import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.ExecutionException;
 
-import javax.management.InstanceNotFoundException;
-import javax.management.MBeanServerNotification;
-import javax.management.Notification;
-import javax.management.NotificationListener;
-
-import com.google.bigtable.repackaged.com.google.protobuf.BigtableZeroCopyByteStringUtil;
 import com.google.bigtable.repackaged.com.google.protobuf.ByteString;
 import com.google.bigtable.repackaged.com.google.protobuf.ServiceException;
 import com.google.bigtable.v1.Column;
@@ -51,13 +44,15 @@ import com.google.bigtable.v1.Mutation;
 import com.google.bigtable.v1.ReadRowsRequest;
 import com.google.bigtable.v1.Row;
 import com.google.bigtable.v1.RowFilter;
+import com.google.bigtable.v1.RowRange;
+import com.google.bigtable.v1.Mutation.DeleteFromRow;
 import com.google.bigtable.v1.Mutation.SetCell;
-import com.google.bigtable.v1.RowFilter.Chain;
 import com.google.bigtable.v1.RowFilter.Chain.Builder;
 import com.google.cloud.bigtable.config.BigtableOptions;
 import com.google.cloud.bigtable.grpc.BigtableDataClient;
 import com.google.cloud.bigtable.grpc.BigtableSession;
-import com.google.cloud.bigtable.hbase.BatchExecutor;
+import com.google.cloud.bigtable.grpc.async.AsyncExecutor;
+import com.google.cloud.bigtable.grpc.async.HeapSizeManager;
 import com.google.cloud.bigtable.hbase.BigtableOptionsFactory;
 import com.google.cloud.bigtable.util.ByteStringer;
 import com.google.common.base.Preconditions;
@@ -67,6 +62,11 @@ import com.yahoo.ycsb.DBException;
 import com.yahoo.ycsb.Status;
 
 public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
+  public static final Charset UTF8_CHARSET = Charset.forName("UTF8");
+  
+  //Must be an object for synchronization and tracking running thread counts. 
+  private static Integer threadCount = 0;
+  
   private Configuration config = HBaseConfiguration.create();
   private Connection connection = null;
   private String tableName = "";
@@ -81,9 +81,10 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   private static BigtableSession session;
   private BigtableDataClient client;
   private BigtableOptions options;
+  private HeapSizeManager heapSizeManager;
+  private AsyncExecutor asyncExecutor;
   
   private byte[] columnFamilyBytes = "cf".getBytes();
-  private ByteString cfByteString = ByteString.copyFrom(columnFamilyBytes);
   
   private String lastTable = "";
   private byte[] lastTableBytes;
@@ -105,9 +106,7 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
    */
   private boolean clientSideBuffering = true;
   private long writeBufferSize = 1024 * 1024 * 12;
-  
-  NotificationListener printListener;
-  
+
   @Override
   public void init() throws DBException {
     Properties props = getProperties();
@@ -118,65 +117,73 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       config.set((String)entry.getKey(), (String)entry.getValue());
     }
     
-    if (useHTableInterface) {
-      try {
-        connection = ConnectionFactory.createConnection(config);
-      } catch (IOException e) {
-        throw new DBException(e);
+    synchronized (threadCount) {
+      ++threadCount;
+      if (useHTableInterface) {
+        try {
+          if (connection == null) {
+            connection = ConnectionFactory.createConnection(config);
+          }
+        } catch (IOException e) {
+          throw new DBException(e);
+        }
+      } else {
+        if (session == null) {
+          try {
+            options = BigtableOptionsFactory.fromConfiguration(config);
+            session = new BigtableSession(options);
+          } catch (IOException e) {
+            throw new DBException("Error loading options from config: ", e);
+          }
+        }
+        
+        client = session.getDataClient();
+        
+        if (clientSideBuffering) {
+          heapSizeManager = new HeapSizeManager(
+              AsyncExecutor.ASYNC_MUTATOR_MAX_MEMORY_DEFAULT,
+              AsyncExecutor.MAX_INFLIGHT_RPCS_DEFAULT);
+          asyncExecutor = new AsyncExecutor(client, heapSizeManager);
+        }
       }
-    } else {
-      try {
-        options = BigtableOptionsFactory.fromConfiguration(config);
-        session = new BigtableSession(options);
-      } catch (IOException e) {
-        throw new DBException("Error loading options from config: ", e);
-      }
-      
-      client = session.getDataClient();
     }
     
-    printListener = new NotificationListener() {
-      public void handleNotification(Notification n, Object handback) {
-          if (!(n instanceof MBeanServerNotification)) {
-              System.out.println("Ignored notification of class " + n.getClass().getName());
-              return;
-          }
-          MBeanServerNotification mbsn = (MBeanServerNotification) n;
-          String what;
-          if (n.getType().equals(MBeanServerNotification.REGISTRATION_NOTIFICATION))
-              what = "MBean registered";
-          else if (n.getType().equals(MBeanServerNotification.UNREGISTRATION_NOTIFICATION))
-              what = "MBean unregistered";
-          else
-              what = "Unknown type " + n.getType();
-          System.out.println("Received MBean Server notification: " + what + ": " +
-                  mbsn.getMBeanName());
-      }
-  };
-  
-//  try {
-//    ManagementFactory.getPlatformMBeanServer().addNotificationListener(
-//        ManagementFactory.RUNTIME_MXBEAN_NAME, printListener, null, null);
-//    
-//  } catch (InstanceNotFoundException e) {
-//    // TODO Auto-generated catch block
-//    e.printStackTrace();
-//  }
+    if ((getProperties().getProperty("debug") != null)
+        && (getProperties().getProperty("debug").compareTo("true") == 0)) {
+      debug = true;
+    }
   }
   
   @Override
   public void cleanup() throws DBException {
     if (useHTableInterface) {
-      try {
-        connection.close();
-      } catch (IOException e) {
-        throw new DBException(e);
+      synchronized (threadCount) {
+        --threadCount;
+        if (threadCount <= 0) {
+          try {
+            connection.close();
+          } catch (IOException e) {
+            throw new DBException(e);
+          }
+        }
       }
     } else {
-      try {
-        session.close();
-      } catch (IOException e) {
-        throw new DBException(e);
+      if (asyncExecutor != null) {
+        try {
+          asyncExecutor.flush();
+        } catch (IOException e) {
+          throw new DBException(e);
+        }
+      }
+      synchronized (threadCount) {
+        --threadCount;
+        if (threadCount <= 0) {
+          try {
+            session.close();
+          } catch (IOException e) {
+            throw new DBException(e);
+          }
+        }
       }
     }
   }
@@ -184,7 +191,12 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   @Override
   public Status read(String table, String key, Set<String> fields,
       HashMap<String, ByteIterator> result) {
-
+    if (debug) {
+      System.out.println("Doing read from HBase columnfamily " 
+          + new String(columnFamilyBytes));
+      System.out.println("Doing read for key: " + key);
+    }
+    
     if (useHTableInterface) {
       // if this is a "new" table, init HTable object. Else, use existing one
       if (!tableName.equals(table)) {
@@ -200,11 +212,6 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       
       Result r = null;
       try {
-        if (debug) {
-          System.out
-              .println("Doing read from HBase columnfamily " + new String(columnFamilyBytes));
-          System.out.println("Doing read for key: " + key);
-        }
         Get g = new Get(Bytes.toBytes(key));
         if (fields == null) {
           g.addFamily(columnFamilyBytes);
@@ -240,6 +247,7 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       }
       return Status.OK;
     } else {
+      // Native version
       setTable(table);
       
       RowFilter filter = RowFilter.newBuilder()
@@ -248,6 +256,9 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       if (fields != null && fields.size() > 0) {
         Builder filterChain = RowFilter.Chain.newBuilder();
         filterChain.addFilters(filter);
+        filterChain.addFilters(RowFilter.newBuilder()
+            .setCellsPerColumnLimitFilter(1)
+            .build());
         int count = 0;
         // usually "field#" so pre-alloc
         final StringBuilder regex = new StringBuilder(fields.size() * 6);
@@ -264,31 +275,32 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       }
       
       final ReadRowsRequest.Builder rrr = ReadRowsRequest.newBuilder()
-          .setTableNameBytes(
-              BigtableZeroCopyByteStringUtil.wrap(lastTableBytes))
+          .setTableNameBytes(ByteStringer.wrap(lastTableBytes))
           .setFilter(filter)
-          .setRowKey(ByteString.copyFrom(key.getBytes()));
+          .setRowKey(ByteStringer.wrap(key.getBytes()));
       
       // TODO - async
       List<Row> rows;
       try {
-        rows = client.readRowsAsync(rrr.build()).get();
+        if (clientSideBuffering) {
+          rows = asyncExecutor.readRowsAsync(rrr.build()).get();
+        } else {
+          rows = client.readRowsAsync(rrr.build()).get();
+        }
         if (rows == null || rows.isEmpty()) {
           return Status.NOT_FOUND;
         }
-        //System.out.println("Got rows: " + rows);
         for (final Row row : rows) {
           for (final Family family : row.getFamiliesList()) {
-            // TODO - is this the same?
             if (Arrays.equals(family.getNameBytes().toByteArray(), columnFamilyBytes)) {
               for (final Column column : family.getColumnsList()) {
-                // we only care about the first cell in each column
-                result.put(Bytes.toString(column.getQualifier().toByteArray()), 
+                // we should only have a single cell per column
+                result.put(column.getQualifier().toString(UTF8_CHARSET), 
                     new ByteArrayByteIterator(column.getCells(0).getValue().toByteArray()));
                 if (debug) {
                   System.out.println(
-                      "Result for field: " + Bytes.toString(column.getQualifier().toByteArray())
-                          + " is: " + Bytes.toString(column.getCells(0).getValue().toByteArray()));
+                      "Result for field: " + column.getQualifier().toString(UTF8_CHARSET)
+                          + " is: " + column.getCells(0).getValue().toString(UTF8_CHARSET));
                 }
               }
             }
@@ -388,14 +400,98 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
 
       return Status.OK;
     } else {
-      // TODO - native
-      return Status.NOT_IMPLEMENTED;
+      // Native version
+      setTable(table);
+      
+      RowFilter filter = RowFilter.newBuilder()
+          .setFamilyNameRegexFilterBytes(ByteStringer.wrap(columnFamilyBytes))
+          .build();
+      if (fields != null && fields.size() > 0) {
+        Builder filterChain = RowFilter.Chain.newBuilder();
+        filterChain.addFilters(filter);
+        filterChain.addFilters(RowFilter.newBuilder()
+            .setCellsPerColumnLimitFilter(1)
+            .build());
+        int count = 0;
+        // usually "field#" so pre-alloc
+        final StringBuilder regex = new StringBuilder(fields.size() * 6);
+        for (final String field : fields) {
+          if (count++ > 0) {
+            regex.append("|");
+          }
+          regex.append(field);
+        }
+        filterChain.addFilters(RowFilter.newBuilder()
+            .setColumnQualifierRegexFilter(
+                ByteStringer.wrap(regex.toString().getBytes()))).build();
+        filter = RowFilter.newBuilder().setChain(filterChain.build()).build();
+      }
+      
+      final RowRange range = RowRange.newBuilder()
+          .setStartKey(ByteStringer.wrap(startkey.getBytes()))
+          .build();
+      
+      final ReadRowsRequest.Builder rrr = ReadRowsRequest.newBuilder()
+          .setTableNameBytes(ByteStringer.wrap(lastTableBytes))
+          .setFilter(filter)
+          .setRowRange(range);
+      
+      // TODO - async
+      List<Row> rows;
+      try {
+        rows = client.readRowsAsync(rrr.build()).get();
+        if (rows == null || rows.isEmpty()) {
+          System.out.println("Nothing found for scanner: " + rrr);
+          return Status.NOT_FOUND;
+        }
+        int numResults = 0;
+        //System.out.println("Results: " + rows);
+        for (final Row row : rows) {
+          final HashMap<String, ByteIterator> rowResult =
+              new HashMap<String, ByteIterator>(fields != null ? fields.size() : 10);
+          
+          for (final Family family : row.getFamiliesList()) {
+            if (Arrays.equals(family.getNameBytes().toByteArray(), columnFamilyBytes)) {
+              for (final Column column : family.getColumnsList()) {
+                // we should only have a single cell per column
+                rowResult.put(column.getQualifier().toString(UTF8_CHARSET), 
+                    new ByteArrayByteIterator(column.getCells(0).getValue().toByteArray()));
+                if (debug) {
+                  System.out.println(
+                      "Result for field: " + column.getQualifier().toString(UTF8_CHARSET)
+                          + " is: " + column.getCells(0).getValue().toString(UTF8_CHARSET));
+                }
+              }
+            }
+          }
+          
+          result.add(rowResult);
+          
+          numResults++;
+          if (numResults >= recordcount) {// if hit recordcount, bail out
+            break;
+          }
+        }
+        return Status.OK;
+      } catch (InterruptedException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+        return Status.ERROR;
+      } catch (ExecutionException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+        return Status.ERROR;
+      }
     }
   }
 
   @Override
   public Status update(String table, String key,
       HashMap<String, ByteIterator> values) {
+    if (debug) {
+      System.out.println("Setting up put for key: " + key);
+    }
+    
     if (useHTableInterface) {
       // if this is a "new" table, init HTable object. Else, use existing one
       if (!tableName.equals(table)) {
@@ -408,10 +504,7 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
           return Status.ERROR;
         }
       }
-
-      if (debug) {
-        System.out.println("Setting up put for key: " + key);
-      }
+      
       Put p = new Put(Bytes.toBytes(key));
       p.setDurability(durability);
       for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
@@ -444,28 +537,35 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
     } else {
       setTable(table);
       
-      // TODO - async/buffered
-      
       final MutateRowRequest.Builder rowMutation = MutateRowRequest.newBuilder();
       rowMutation.setRowKey(ByteString.copyFromUtf8(key));
-      rowMutation.setTableNameBytes(BigtableZeroCopyByteStringUtil.wrap(lastTableBytes));
+      rowMutation.setTableNameBytes(ByteStringer.wrap(lastTableBytes));
       
       for (final Entry<String, ByteIterator> entry : values.entrySet()) {
         final Mutation.Builder mutationBuilder = rowMutation.addMutationsBuilder();
         final SetCell.Builder setCellBuilder = mutationBuilder.getSetCellBuilder();
         
-        setCellBuilder.setFamilyNameBytes(BigtableZeroCopyByteStringUtil.wrap(columnFamilyBytes));
-        setCellBuilder.setColumnQualifier(BigtableZeroCopyByteStringUtil.wrap(entry.getKey().getBytes()));
-        setCellBuilder.setValue(BigtableZeroCopyByteStringUtil.wrap(entry.getValue().toArray()));
+        setCellBuilder.setFamilyNameBytes(ByteStringer.wrap(columnFamilyBytes));
+        setCellBuilder.setColumnQualifier(ByteStringer.wrap(entry.getKey().getBytes()));
+        setCellBuilder.setValue(ByteStringer.wrap(entry.getValue().toArray()));
         setCellBuilder.setTimestampMicros(-1);
       }
       
       try {
-        client.mutateRow(rowMutation.build());
+        if (clientSideBuffering) {
+          asyncExecutor.mutateRowAsync(rowMutation.build());
+        } else {
+          client.mutateRow(rowMutation.build());
+        }
         return Status.OK;
       } catch (ServiceException e) {
         System.err.println("Failed to insert key: " + key + " " + e.getMessage());
         return Status.ERROR;
+      } catch (InterruptedException e) {
+        System.err.println("Interrupted while inserting key: " + key + " " 
+            + e.getMessage());
+        Thread.currentThread().interrupt();
+        return Status.ERROR; // never get here, but lets make the compiler happy
       }
     }
   }
@@ -478,6 +578,10 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
 
   @Override
   public Status delete(String table, String key) {
+    if (debug) {
+      System.out.println("Doing delete for key: " + key);
+    }
+    
     if (useHTableInterface) {
       // if this is a "new" table, init HTable object. Else, use existing one
       if (!tableName.equals(table)) {
@@ -489,10 +593,6 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
           System.err.println("Error accessing HBase table: " + e);
           return Status.ERROR;
         }
-      }
-
-      if (debug) {
-        System.out.println("Doing delete for key: " + key);
       }
 
       final Delete d = new Delete(Bytes.toBytes(key));
@@ -512,8 +612,30 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
         return Status.ERROR;
       }
     } else {
-      // TODO - native
-      return Status.NOT_IMPLEMENTED;
+      setTable(table);
+      
+      final MutateRowRequest.Builder rowMutation = MutateRowRequest.newBuilder()
+          .setRowKey(ByteString.copyFromUtf8(key))
+          .setTableNameBytes(ByteStringer.wrap(lastTableBytes));
+      rowMutation.addMutationsBuilder().setDeleteFromRow(
+          DeleteFromRow.getDefaultInstance());
+      
+      try {
+        if (clientSideBuffering) {
+          asyncExecutor.mutateRowAsync(rowMutation.build());
+        } else {
+          client.mutateRow(rowMutation.build());
+        }
+        return Status.OK;
+      } catch (ServiceException e) {
+        System.err.println("Failed to delete key: " + key + " " + e.getMessage());
+        return Status.ERROR;
+      } catch (InterruptedException e) {
+        System.err.println("Interrupted while delete key: " + key + " " 
+            + e.getMessage());
+        Thread.currentThread().interrupt();
+        return Status.ERROR; // never get here, but lets make the compiler happy
+      }
     }
   }
 
@@ -525,7 +647,8 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   private void setTable(final String table) {
     if (!lastTable.equals(table)) {
       lastTable = table;
-      lastTableBytes = options.getClusterName().toTableName(table).toString().getBytes();
+      lastTableBytes = options.getClusterName().toTableName(table)
+          .toString().getBytes();
     }
   }
   
