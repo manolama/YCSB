@@ -22,6 +22,11 @@ To run against an HBase 0.98.x cluster, use the `hbase098` binding.
 
 See `hbase098/README.md` for configuration details.
 
+## Configuration Options
+In addition to those options available for the `hbase098` binding, the following options are available for the `hbase10` binding:
+
+* `durability`: Whether or not writes should be appended to the WAL. Bypassing the WAL can improve throughput but data cannot be recovered in the event of a crash. The default is true.
+
 ## Bigtable
 
 Google's Bigtable service provides an implementation of the HBase API for migrating existing applications. Users can perform load tests against Bigtable using this binding.
@@ -92,7 +97,7 @@ If you have an existing HBase configuration directory with an `hbase-site.xml` f
 
 If you wish to try other API implementations (1.1.x or 1.2.x) change the `hbase.client.connection.impl` appropriately to match the JAR you downloaded.
 
-If you have an existing HBase config directory, make sure to add it to the class path via `-cp /PATH/TO/DIR`.
+If you have an existing HBase config directory, make sure to add it to the class path via `-cp <PATH_TO_BIGTABLE_JAR>:<CONF_DIR>`.
 
 ### 8. Execute a Workload
 
