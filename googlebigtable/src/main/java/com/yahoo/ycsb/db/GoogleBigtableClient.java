@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016 YCSB contributors. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
 package com.yahoo.ycsb.db;
 
 import java.io.IOException;
@@ -21,7 +37,6 @@ import org.apache.hadoop.hbase.client.BufferedMutatorParams;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -61,41 +76,61 @@ import com.yahoo.ycsb.ByteIterator;
 import com.yahoo.ycsb.DBException;
 import com.yahoo.ycsb.Status;
 
+/**
+ * Google Bigtable client for YCSB framework.
+ * 
+ * Bigtable offers two APIs. These include a native GRPC API as well as an
+ * HBase API wrapper for the GRPC API. This client implements both versions to
+ * compare wrapping overhead.
+ * 
+ * Note that for the most part, the HBase API code should be kept in sync with 
+ * HBaseClient10.java.
+ */
 public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   public static final Charset UTF8_CHARSET = Charset.forName("UTF8");
   
-  //Must be an object for synchronization and tracking running thread counts. 
+  private static final String ASYNC_MUTATOR_MAX_MEMORY = "mutatorMaxMemory";
+  private static final String ASYNC_MAX_INFLIGHT_RPCS = "mutatorMaxInflightRPCs";
+  private static final String USE_HBASE_API = "usehbaseapi";
+  private static final String CLIENT_SIDE_BUFFERING = "clientbuffering";
+  
+  /** Must be an object for synchronization and tracking running thread counts. */ 
   private static Integer threadCount = 0;
   
-  private Configuration config = HBaseConfiguration.create();
-  private Connection connection = null;
-  private String tableName = "";
+  /** This will load the hbase-site.xml config file */
+  private final static Configuration config = HBaseConfiguration.create();
+  private static Connection connection = null;
   
-  //Depending on the value of clientSideBuffering, either bufferedMutator
-  // (clientSideBuffering) or currentTable (!clientSideBuffering) will be used.
+  /** Depending on the value of clientSideBuffering, either bufferedMutator
+   * (clientSideBuffering) or currentTable (!clientSideBuffering) will be used.*/
   private Table currentTable = null;
   private BufferedMutator bufferedMutator = null;
   
+  /** Print debug information to standard out */
   private boolean debug = false;
-    
+  
+  /** Global Bigtable native API objects, only instantiated when not using the 
+   * HBase API */ 
+  private static BigtableOptions options;
   private static BigtableSession session;
+  
+  /** Thread loacal Bigtable native API objects instantiated when not using the 
+   * HBase API */
   private BigtableDataClient client;
-  private BigtableOptions options;
   private HeapSizeManager heapSizeManager;
   private AsyncExecutor asyncExecutor;
   
-  private byte[] columnFamilyBytes = "cf".getBytes();
+  /** The column family use for the workload */
+  private byte[] columnFamilyBytes;
   
+  /** Cache for the last table name/ID to avoid recreating HTable instances 
+   * or lookups. */
   private String lastTable = "";
   private byte[] lastTableBytes;
   
-  private boolean useHTableInterface = false;
+  /** Whether or not to use the HBase interface or Bigtable's native interface */
+  private boolean useHBaseInterface = true;
   
-  /**
-   * Durability to use for puts and deletes.
-   */
-  private Durability durability = Durability.USE_DEFAULT;
-
   /** Whether or not a page filter should be used to limit scan length. */
   private boolean usePageFilter = true;
 
@@ -104,22 +139,36 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
    * HBaseClient. For measuring insert/update/delete latencies, client side
    * buffering should be disabled.
    */
-  private boolean clientSideBuffering = true;
+  private boolean clientSideBuffering = false;
   private long writeBufferSize = 1024 * 1024 * 12;
 
   @Override
   public void init() throws DBException {
     Properties props = getProperties();
     
+    // Defaults the user can override if needed
+    config.set("google.bigtable.auth.service.account.enable", "true");
+    config.set("hbase.client.connection.impl", 
+        "com.google.cloud.bigtable.hbase1_0.BigtableConnection");
+    
+    // make it easy on ourselves by copying all CLI properties into the config object.
     Iterator<Entry<Object, Object>> it = props.entrySet().iterator();
     while (it.hasNext()) {
       Entry<Object, Object> entry = it.next();
       config.set((String)entry.getKey(), (String)entry.getValue());
     }
     
+    useHBaseInterface = getProperties().getProperty(USE_HBASE_API, "true")
+         .equals("true") ? true : false;
+    clientSideBuffering = getProperties().getProperty(CLIENT_SIDE_BUFFERING, "false")
+        .equals("true") ? true : false;
+    
+    System.out.println("Running Google Bigtable with " + 
+         (useHBaseInterface ? "HBase" : "Native") + " API" +
+         (clientSideBuffering ? " and client side buffering." : "."));
     synchronized (threadCount) {
       ++threadCount;
-      if (useHTableInterface) {
+      if (useHBaseInterface) {
         try {
           if (connection == null) {
             connection = ConnectionFactory.createConnection(config);
@@ -132,17 +181,25 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
           try {
             options = BigtableOptionsFactory.fromConfiguration(config);
             session = new BigtableSession(options);
+            // important to instantiate the first client here, otherwise the
+            // other threads may receive an NPE from the options when they try
+            // to read the cluster name.
+            client = session.getDataClient();
           } catch (IOException e) {
             throw new DBException("Error loading options from config: ", e);
           }
+        } else {
+          client = session.getDataClient();
         }
-        
-        client = session.getDataClient();
         
         if (clientSideBuffering) {
           heapSizeManager = new HeapSizeManager(
-              AsyncExecutor.ASYNC_MUTATOR_MAX_MEMORY_DEFAULT,
-              AsyncExecutor.MAX_INFLIGHT_RPCS_DEFAULT);
+              Long.parseLong(
+                  getProperties().getProperty(ASYNC_MUTATOR_MAX_MEMORY, 
+                      Long.toString(AsyncExecutor.ASYNC_MUTATOR_MAX_MEMORY_DEFAULT))),
+              Integer.parseInt(
+                  getProperties().getProperty(ASYNC_MAX_INFLIGHT_RPCS, 
+                      Integer.toString(AsyncExecutor.MAX_INFLIGHT_RPCS_DEFAULT))));
           asyncExecutor = new AsyncExecutor(client, heapSizeManager);
         }
       }
@@ -152,11 +209,18 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
         && (getProperties().getProperty("debug").compareTo("true") == 0)) {
       debug = true;
     }
+    
+    final String columnFamily = getProperties().getProperty("columnfamily");
+    if (columnFamily == null) {
+      System.err.println("Error, must specify a columnfamily for HBase table");
+      throw new DBException("No columnfamily specified");
+    }
+    columnFamilyBytes = Bytes.toBytes(columnFamily);
   }
   
   @Override
   public void cleanup() throws DBException {
-    if (useHTableInterface) {
+    if (useHBaseInterface) {
       synchronized (threadCount) {
         --threadCount;
         if (threadCount <= 0) {
@@ -197,13 +261,12 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       System.out.println("Doing read for key: " + key);
     }
     
-    if (useHTableInterface) {
+    if (useHBaseInterface) {
       // if this is a "new" table, init HTable object. Else, use existing one
-      if (!tableName.equals(table)) {
+      if (!lastTable.equals(table)) {
         currentTable = null;
         try {
           getHTable(table);
-          tableName = table;
         } catch (IOException e) {
           System.err.println("Error accessing HBase table: " + e);
           return Status.ERROR;
@@ -225,9 +288,6 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
         if (debug) {
           System.err.println("Error doing get: " + e);
         }
-        return Status.ERROR;
-      } catch (ConcurrentModificationException e) {
-        // do nothing for now...need to understand HBase concurrency model better
         return Status.ERROR;
       }
 
@@ -279,14 +339,9 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
           .setFilter(filter)
           .setRowKey(ByteStringer.wrap(key.getBytes()));
       
-      // TODO - async
       List<Row> rows;
       try {
-        if (clientSideBuffering) {
-          rows = asyncExecutor.readRowsAsync(rrr.build()).get();
-        } else {
           rows = client.readRowsAsync(rrr.build()).get();
-        }
         if (rows == null || rows.isEmpty()) {
           return Status.NOT_FOUND;
         }
@@ -309,12 +364,11 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
         
         return Status.OK;
       } catch (InterruptedException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
+        System.err.println("Interrupted during get: " + e);
+        Thread.currentThread().interrupt();
         return Status.ERROR;
       } catch (ExecutionException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
+        System.err.println("Exception during get: " + e);
         return Status.ERROR;
       }
     }
@@ -323,13 +377,12 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   @Override
   public Status scan(String table, String startkey, int recordcount,
       Set<String> fields, Vector<HashMap<String, ByteIterator>> result) {
-    if (useHTableInterface) {
+    if (useHBaseInterface) {
       // if this is a "new" table, init HTable object. Else, use existing one
-      if (!tableName.equals(table)) {
+      if (!lastTable.equals(table)) {
         currentTable = null;
         try {
           getHTable(table);
-          tableName = table;
         } catch (IOException e) {
           System.err.println("Error accessing HBase table: " + e);
           return Status.ERROR;
@@ -379,10 +432,7 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
           // add rowResult to result vector
           result.add(rowResult);
           numResults++;
-
-          // PageFilter does not guarantee that the number of results is <=
-          // pageSize, so this
-          // break is required.
+          
           if (numResults >= recordcount) {// if hit recordcount, bail out
             break;
           }
@@ -436,16 +486,14 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
           .setFilter(filter)
           .setRowRange(range);
       
-      // TODO - async
       List<Row> rows;
       try {
         rows = client.readRowsAsync(rrr.build()).get();
         if (rows == null || rows.isEmpty()) {
-          System.out.println("Nothing found for scanner: " + rrr);
           return Status.NOT_FOUND;
         }
         int numResults = 0;
-        //System.out.println("Results: " + rows);
+        
         for (final Row row : rows) {
           final HashMap<String, ByteIterator> rowResult =
               new HashMap<String, ByteIterator>(fields != null ? fields.size() : 10);
@@ -474,12 +522,11 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
         }
         return Status.OK;
       } catch (InterruptedException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
+        System.err.println("Interrupted during scan: " + e);
+        Thread.currentThread().interrupt();
         return Status.ERROR;
       } catch (ExecutionException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
+        System.err.println("Exception during scan: " + e);
         return Status.ERROR;
       }
     }
@@ -492,13 +539,12 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       System.out.println("Setting up put for key: " + key);
     }
     
-    if (useHTableInterface) {
+    if (useHBaseInterface) {
       // if this is a "new" table, init HTable object. Else, use existing one
-      if (!tableName.equals(table)) {
+      if (!lastTable.equals(table)) {
         currentTable = null;
         try {
           getHTable(table);
-          tableName = table;
         } catch (IOException e) {
           System.err.println("Error accessing HBase table: " + e);
           return Status.ERROR;
@@ -506,7 +552,6 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       }
       
       Put p = new Put(Bytes.toBytes(key));
-      p.setDurability(durability);
       for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
         byte[] value = entry.getValue().toArray();
         if (debug) {
@@ -548,7 +593,7 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
         setCellBuilder.setFamilyNameBytes(ByteStringer.wrap(columnFamilyBytes));
         setCellBuilder.setColumnQualifier(ByteStringer.wrap(entry.getKey().getBytes()));
         setCellBuilder.setValue(ByteStringer.wrap(entry.getValue().toArray()));
-        setCellBuilder.setTimestampMicros(-1);
+        setCellBuilder.setTimestampMicros(-1); // set time to "now"
       }
       
       try {
@@ -582,13 +627,12 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       System.out.println("Doing delete for key: " + key);
     }
     
-    if (useHTableInterface) {
+    if (useHBaseInterface) {
       // if this is a "new" table, init HTable object. Else, use existing one
-      if (!tableName.equals(table)) {
+      if (!lastTable.equals(table)) {
         currentTable = null;
         try {
           getHTable(table);
-          tableName = table;
         } catch (IOException e) {
           System.err.println("Error accessing HBase table: " + e);
           return Status.ERROR;
@@ -596,7 +640,6 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
       }
 
       final Delete d = new Delete(Bytes.toBytes(key));
-      d.setDurability(durability);
       try {
         if (clientSideBuffering) {
           Preconditions.checkNotNull(bufferedMutator);
@@ -606,9 +649,7 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
         }
         return Status.OK;
       } catch (IOException e) {
-        if (debug) {
-          System.err.println("Error doing delete: " + e);
-        }
+        System.err.println("Error doing delete: " + e);
         return Status.ERROR;
       }
     } else {
@@ -647,14 +688,25 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   private void setTable(final String table) {
     if (!lastTable.equals(table)) {
       lastTable = table;
-      lastTableBytes = options.getClusterName().toTableName(table)
-          .toString().getBytes();
+      lastTableBytes = options
+          .getClusterName()
+          .toTableName(table)
+          .toString()
+          .getBytes();
     }
   }
   
+  /**
+   * Pulled from HBaseClient10. Gets an HTable object from the connection object.
+   * Make sure to cache the table name from the last operation so the thread 
+   * avoids the heavy work of creating new table objects.
+   * @param table The name of the table to find
+   * @throws IOException If the table doesn't exist or the connection is gone
+   */
   public void getHTable(String table) throws IOException {
     final TableName tName = TableName.valueOf(table);
     this.currentTable = this.connection.getTable(tName);
+    lastTable = table;
     // suggestions from
     // http://ryantwopointoh.blogspot.com/2009/01/
     // performance-of-hbase-importing.html
