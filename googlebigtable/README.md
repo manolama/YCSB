@@ -44,7 +44,7 @@ Make a note of the column family, in this example it's `cf``.
 
 The Bigtable protocol uses HTTP/2 which requires an ALPN protocol negotiation implementation. On JVM instantiation the implementation must be loaded before attempting to connect to the cluster. If you're using Java 7 or 8, use this [Jetty Version Table](http://www.eclipse.org/jetty/documentation/current/alpn-chapter.html#alpn-versions) to determine the version appropriate for your JVM. (ALPN is included in JDK 9+). Download the proper jar from [Maven](http://search.maven.org/#search%7Cgav%7C1%7Cg%3A%22org.mortbay.jetty.alpn%22%20AND%20a%3A%22alpn-boot%22) somewhere on your system.
 
-### 7. Download JSON Credentials
+### 5. Download JSON Credentials
 
 Follow these instructions for [Generating a JSON key](https://cloud.google.com/bigtable/docs/installing-hbase-shell#service-account) and save it to your host.
 
@@ -68,7 +68,7 @@ bin/ycsb run googlebigtable -p columnfamily=cf -p google.bigtable.project.id=<PR
 
 ## Configuration Options
 
-The following options can be configured using CLI (using the `-p` parameter) or hbase-site.xml (add the HBase config directory to YCSB's class path via CLI).
+The following options can be configured using CLI (using the `-p` parameter) or hbase-site.xml (add the HBase config directory to YCSB's class path via CLI). Check the [Cloud Bigtable Client](https://github.com/manolama/cloud-bigtable-client) project for additional tuning parameters.
 
 * `columnfamily`: (Required) The Bigtable column family to target.
 * `google.bigtable.project.id`: (Required) The ID of a Bigtable project.

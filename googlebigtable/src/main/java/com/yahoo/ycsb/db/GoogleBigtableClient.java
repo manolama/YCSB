@@ -132,7 +132,7 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
     config.set("google.bigtable.auth.service.account.enable", "true");
     
     // make it easy on ourselves by copying all CLI properties into the config object.
-    Iterator<Entry<Object, Object>> it = props.entrySet().iterator();
+    final Iterator<Entry<Object, Object>> it = props.entrySet().iterator();
     while (it.hasNext()) {
       Entry<Object, Object> entry = it.next();
       config.set((String)entry.getKey(), (String)entry.getValue());
