@@ -61,6 +61,11 @@ Make sure to replace the variables in the angle brackets above with the proper v
 
 The `load` step only executes inserts into the datastore. After loading data, run the same workload to mix reads with writes.
 
+```
+bin/ycsb run googlebigtable -p columnfamily=cf -p google.bigtable.project.id=<PROJECT_ID> -p google.bigtable.cluster.name=<CLUSTER> -p google.bigtable.zone.name=<ZONE> -p google.bigtable.auth.service.account.enable=true -p google.bigtable.auth.json.keyfile=<PATH_TO_JSON_KEY> -jvm-args='-Xbootclasspath/p:<PATH_TO_ALPN_JAR>' -P workloads/workloada
+
+```
+
 ## Configuration Options
 
 The following options can be configured using CLI (using the `-p` parameter) or hbase-site.xml.
