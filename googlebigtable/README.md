@@ -17,7 +17,7 @@ LICENSE file.
 
 # Google Bigtable  Driver for YCSB
 
-This driver provides a YCSB workload binding for Google's hosted Bigtable, the inspiration for a number of key-value stores like HBase and Cassandra. The Bigtable Java client provides both native and HBase client APIs. Either may be used via this binding.
+This driver provides a YCSB workload binding for Google's hosted Bigtable, the inspiration for a number of key-value stores like HBase and Cassandra. The Bigtable Java client provides both Protobuf based GRPC and HBase client APIs. This binding implements the Protobuf API for testing the native client. To test Bigtable using the HBase API, see the `hbase10` binding.
 
 ## Quickstart
 
@@ -68,7 +68,7 @@ bin/ycsb run googlebigtable -p columnfamily=cf -p google.bigtable.project.id=<PR
 
 ## Configuration Options
 
-The following options can be configured using CLI (using the `-p` parameter) or hbase-site.xml.
+The following options can be configured using CLI (using the `-p` parameter) or hbase-site.xml (add the HBase config directory to YCSB's class path via CLI).
 
 * `columnfamily`: (Required) The Bigtable column family to target.
 * `google.bigtable.project.id`: (Required) The ID of a Bigtable project.
@@ -76,8 +76,6 @@ The following options can be configured using CLI (using the `-p` parameter) or 
 * `google.bigtable.zone.name`: (Required) Zone where the Bigtable cluster is running.
 * `google.bigtable.auth.service.account.enable`: Whether or not to authenticate with a service account. The default is true.
 * `google.bigtable.auth.json.keyfile`: (Required) A service account key for authentication.
-* `hbase.client.connection.impl`: When using the HBase API, which implementation to use. Default is `com.google.cloud.bigtable.hbase1_0.BigtableConnection`.
 * `debug`: If true, prints debug information to standard out. The default is false.
-* `usehbaseapi`: Whether or not to use the HBase API for operations. The default is true.
-* `clientbuffering`: Whether or not to use client side buffering and batching of write operations. This can significantly improve performance.
+* `clientbuffering`: Whether or not to use client side buffering and batching of write operations. This can significantly improve performance and defaults to true.
 
