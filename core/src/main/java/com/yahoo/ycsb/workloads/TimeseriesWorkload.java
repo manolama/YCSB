@@ -49,26 +49,30 @@ public class TimeseriesWorkload extends Workload {
   public static final String TAG_VALUE_LENGTH_PROPERTY = "tag_value_length";
   public static final String TAG_VALUE_LENGTH_PROPERTY_DEFAULT = "8";
   
+  private Properties properties;
+  
   private Generator<String> keyGenerator;
   private Generator<String> tagKeyGenerator;
   private Generator<String> tagValueGenerator;
+  
+  private int timestampInterval;
+  private TimeUnit timeUnits;
+  
   private int recordcount;
   private int tagPairs;
   private String table;
-  private UnixEpochTimestampGenerator timestampGenerator;
   
   private String[] keys;
-  private int keyIdx;
+
   private int numKeys;
   private String[] tagKeys;
   private int[] tagCardinality;
   private String[][] tagValues;
-  private int[] tagValueIdxs;
   private int firstIncrementableCardinality;
-  private boolean rollover;
-  
+
   @Override
   public void init(final Properties p) throws WorkloadException {
+    properties = p;
     recordcount =
         Integer.parseInt(p.getProperty(Client.RECORD_COUNT_PROPERTY, 
             Client.DEFAULT_RECORD_COUNT));
@@ -133,7 +137,7 @@ public class TimeseriesWorkload extends Workload {
     
     tagKeys = new String[tagPairs];
     tagValues = new String[tagPairs][];
-    tagValueIdxs = new int[tagPairs]; // all zeros
+
     for (int i = 0; i < tagPairs; ++i) {
       tagKeys[i] = tagKeyGenerator.nextString();
       
@@ -145,8 +149,6 @@ public class TimeseriesWorkload extends Workload {
     }
     
     // figure out the start timestamp based on the units, cardinality and interval
-    TimeUnit timeUnits;
-    int timestampInterval = 0;
     try {
       timestampInterval = Integer.parseInt(p.getProperty(
           TIMESTAMP_INTERVAL_PROPERTY, TIMESTAMP_INTERVAL_PROPERTY_DEFAULT));
@@ -165,32 +167,24 @@ public class TimeseriesWorkload extends Workload {
       throw new WorkloadException("YCSB doesn't support " + timeUnits + 
           " at this time.");
     }
-    final String startingTimestamp = 
-        p.getProperty(TIMESTAMP_START_PROPERTY);
-    if (startingTimestamp == null || startingTimestamp.isEmpty()) {
-      timestampGenerator = new UnixEpochTimestampGenerator(timestampInterval, timeUnits);
-    } else {
-      try {
-        timestampGenerator = new UnixEpochTimestampGenerator(timestampInterval, timeUnits, 
-            Long.parseLong(startingTimestamp));
-      } catch (NumberFormatException nfe) {
-        throw new WorkloadException("Unable to parse the " + 
-            TIMESTAMP_START_PROPERTY, nfe);
-      }
-    }
-    // set the last value properly.
-    timestampGenerator.nextValue();
   }
   
   @Override
   public Object initThread(Properties p, int mythreadid, int threadcount) throws WorkloadException {
-    return null;
+    if (properties == null) {
+      throw new WorkloadException("Workload has not been initialized.");
+    }
+    return new ThreadState(mythreadid, threadcount);
   }
   
   @Override
   public boolean doInsert(DB db, Object threadstate) {
+    if (threadstate == null) {
+      //throw new WorkloadException("Missing thread state");
+      return false;
+    }
     final HashMap<String, ByteIterator> tags = new HashMap<String, ByteIterator>(tagPairs);
-    final String key = nextDataPoint(tags);
+    final String key = ((ThreadState)threadstate).nextDataPoint(tags);
     if (db.insert(table, key, tags) == Status.OK) {
       return true;
     }
@@ -203,56 +197,51 @@ public class TimeseriesWorkload extends Workload {
     return false;
   }
 
-  private String nextDataPoint(HashMap<String, ByteIterator> map) {
-    if (rollover) {
-      timestampGenerator.nextValue();
-      rollover = false;
-    }
+  class ThreadState {
+    private final UnixEpochTimestampGenerator timestampGenerator;
     
-    final String key = keys[keyIdx];
-    for (int i = 0; i < tagPairs; ++i) {
-      int tvidx = tagValueIdxs[i];
-      map.put(tagKeys[i], new StringByteIterator(tagValues[i][tvidx]));
-    }
+    private int keyIdx;
+    private int keyIdxStart;
+    private int keyIdxEnd;
+    private int[] tagValueIdxs;
+
+    private boolean rollover;
     
-    map.put(TIMESTAMP_KEY, new ByteArrayByteIterator(
-        Utils.longToBytes(timestampGenerator.currentValue())));
-    map.put(VALUE_KEY, new ByteArrayByteIterator(Utils.doubleToBytes(
-        Utils.random().nextDouble() * 100000)));
-    
-    boolean tagRollover = false;
-    for (int i = tagCardinality.length - 1; i >= 0; --i) {
-      if (tagCardinality[i] <= 1) {
-        // nothing to increment here
-        continue;
+    ThreadState(final int threadID, final int threadCount) throws WorkloadException {
+      if (threadID >= threadCount) {
+        throw new IllegalStateException("Thread ID " + threadID + " cannot be greater "
+            + "than or equal than the thread count " + threadCount);
+      }
+      if (keys.length < threadCount) {
+        throw new WorkloadException("Thread count " + threadCount + " must be greater "
+            + "than or equal to key count " + keys.length);
       }
       
-      if (tagValueIdxs[i] + 1 >= tagCardinality[i]) {
-        tagValueIdxs[i] = 0;
-        if (i == firstIncrementableCardinality) {
-          tagRollover = true;
+      int keysPerThread = keys.length / threadCount;
+      keyIdx = keyIdxStart = keysPerThread * threadID;
+      if (threadCount - 1 == threadID) {
+        keyIdxEnd = keys.length;
+      } else {
+        keyIdxEnd = keyIdxStart + keysPerThread;
+      }
+      
+      tagValueIdxs = new int[tagPairs]; // all zeros
+      
+      final String startingTimestamp = 
+          properties.getProperty(TIMESTAMP_START_PROPERTY);
+      if (startingTimestamp == null || startingTimestamp.isEmpty()) {
+        timestampGenerator = new UnixEpochTimestampGenerator(timestampInterval, timeUnits);
+      } else {
+        try {
+          timestampGenerator = new UnixEpochTimestampGenerator(timestampInterval, timeUnits, 
+              Long.parseLong(startingTimestamp));
+        } catch (NumberFormatException nfe) {
+          throw new WorkloadException("Unable to parse the " + 
+              TIMESTAMP_START_PROPERTY, nfe);
         }
-      } else {
-         ++tagValueIdxs[i];
-         break;
       }
-    }
-    
-    if (tagRollover) {
-      if (keyIdx + 1 >= keys.length) {
-        keyIdx = 0;
-        rollover = true;
-      } else {
-        ++keyIdx;
-      }
-    }
-    
-    return key;
-  }
-  
-  class ThreadState {
-    
-    ThreadState() {
+      // set the last value properly.
+      timestampGenerator.nextValue();
     }
     
     private String nextDataPoint(HashMap<String, ByteIterator> map) {
@@ -291,8 +280,8 @@ public class TimeseriesWorkload extends Workload {
       }
       
       if (tagRollover) {
-        if (keyIdx + 1 >= keys.length) {
-          keyIdx = 0;
+        if (keyIdx + 1 >= keyIdxEnd) {
+          keyIdx = keyIdxStart;
           rollover = true;
         } else {
           ++keyIdx;
