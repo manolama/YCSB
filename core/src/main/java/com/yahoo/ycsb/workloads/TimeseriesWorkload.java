@@ -15,7 +15,7 @@ import com.yahoo.ycsb.Utils;
 import com.yahoo.ycsb.Workload;
 import com.yahoo.ycsb.WorkloadException;
 import com.yahoo.ycsb.generator.Generator;
-import com.yahoo.ycsb.generator.OrderedPrintableStringGenerator;
+import com.yahoo.ycsb.generator.IncrementingPrintableStringGenerator;
 import com.yahoo.ycsb.generator.UnixEpochTimestampGenerator;
 
 public class TimeseriesWorkload extends Workload {  
@@ -64,9 +64,9 @@ public class TimeseriesWorkload extends Workload {
       recordcount = Integer.MAX_VALUE;
     }
     
-    keyGenerator = new OrderedPrintableStringGenerator(4);
-    tagKeyGenerator = new OrderedPrintableStringGenerator(2);
-    tagValueGenerator = new OrderedPrintableStringGenerator(4);
+    keyGenerator = new IncrementingPrintableStringGenerator(4);
+    tagKeyGenerator = new IncrementingPrintableStringGenerator(2);
+    tagValueGenerator = new IncrementingPrintableStringGenerator(4);
     tagPairs = Integer.parseInt(p.getProperty(TAG_COUNT_PROPERTY, 
         TAG_COUNT_PROPERTY_DEFAULT));
     tagCardinality = new int[tagPairs];

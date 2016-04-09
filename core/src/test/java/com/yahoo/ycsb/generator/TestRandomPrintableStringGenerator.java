@@ -8,7 +8,7 @@ public class TestRandomPrintableStringGenerator {
 
   @Test
   public void foobar() {
-    final int[] characterSet = Utils.printableBasicAlphaASCIISet();
+    final int[] characterSet = IncrementingPrintableStringGenerator.printableBasicAlphaASCIISet();
     for (int c : characterSet) {
       System.out.println("Char: [" + new String(Character.toChars(c)) + "] "
           + "cp [" + c + "]  type [" + Character.getType(c) + "] isAlpha [" + 

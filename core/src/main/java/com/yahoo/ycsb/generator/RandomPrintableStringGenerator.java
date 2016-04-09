@@ -16,7 +16,7 @@ public class RandomPrintableStringGenerator extends Generator<String> {
   }
   
   public RandomPrintableStringGenerator(final int length) {
-    this(length, Utils.printableBasicAlphaNumericASCIISet());
+    this(length, IncrementingPrintableStringGenerator.printableBasicAlphaNumericASCIISet());
   }
   
   public RandomPrintableStringGenerator(final int length, final int[] characterSet) {

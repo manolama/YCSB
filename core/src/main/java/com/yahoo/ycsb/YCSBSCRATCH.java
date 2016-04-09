@@ -16,6 +16,7 @@ import com.yahoo.ycsb.generator.CounterGenerator;
 import com.yahoo.ycsb.generator.DiscreteGenerator;
 import com.yahoo.ycsb.generator.ExponentialGenerator;
 import com.yahoo.ycsb.generator.HotspotIntegerGenerator;
+import com.yahoo.ycsb.generator.IncrementingPrintableStringGenerator;
 import com.yahoo.ycsb.generator.RandomPrintableStringGenerator;
 import com.yahoo.ycsb.generator.ScrambledZipfianGenerator;
 import com.yahoo.ycsb.generator.UniformGenerator;
@@ -80,7 +81,7 @@ public class YCSBSCRATCH {
   static void testCharSets() {
     //  final int[] characterSet = RandomPrintableStringGenerator.generateCharacterSet(
     //  127, null, false, RandomPrintableStringGenerator.ALLBUTCONTROL);
-    final int[] characterSet = Utils.fullPrintableBasicASCIISet();
+    final int[] characterSet = IncrementingPrintableStringGenerator.fullPrintableBasicASCIISet();
     for (int c : characterSet) {
     System.out.println("Char: [" + new String(Character.toChars(c)) + "] "
         + "cp [" + c + "]  type [" + Character.getType(c) + "] isAlpha [" + 
@@ -92,7 +93,7 @@ public class YCSBSCRATCH {
   static void randomPrintableStringGenerator() {
     RandomPrintableStringGenerator gen = //new RandomPrintableStringGenerator();
         new RandomPrintableStringGenerator(256, 
-            Utils.fullPrintablePlaneZeroSet());
+            IncrementingPrintableStringGenerator.fullPrintablePlaneZeroSet());
     long st = System.nanoTime();
     for (int i = 0; i < 1000000; i++) {
       if (i < 40) {
