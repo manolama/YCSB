@@ -1,6 +1,11 @@
 package com.yahoo.ycsb.workloads;
 
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
+
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map.Entry;
 
 import java.util.Properties;
@@ -8,44 +13,57 @@ import java.util.Set;
 import java.util.Vector;
 
 import com.yahoo.ycsb.ByteIterator;
+import com.yahoo.ycsb.Client;
 import com.yahoo.ycsb.DB;
 import com.yahoo.ycsb.Status;
 import com.yahoo.ycsb.Utils;
+import com.yahoo.ycsb.WorkloadException;
 import com.yahoo.ycsb.generator.UnixEpochTimestampGenerator;
 
-import static org.junit.Assert.assertEquals;
 import org.testng.annotations.Test;
 
 public class TestTimeseriesWorkload {
 
   @Test
   public void foobar() throws Exception {
-    final int records = 10;
-    final Properties p = new Properties();
-    p.put("recordcount", records);
+    final Properties p = getUTProperties();
     
-    p.put("fieldcount", "1");
-    p.put("tag_count", "2");
-    p.put("tag_cardinality", "1,2");
     final TimeseriesWorkload wl = new TimeseriesWorkload();
     wl.init(p);
     
     final MockDB db = new MockDB();
     
-    for (int i = 0; i < records + 64; i++) {
+    for (int i = 0; i < 74; i++) {
       wl.doInsert(db, null);
     }
+    //db.dumpStdout();
     
-    double val = 423423423212.352342346;
-    byte[] b = Utils.doubleToBytes(val);
-    assertEquals(val, Utils.bytesToDouble(b), 0.0001);
-    
-    long val2 = 32423425234563523L;
-    b = Utils.longToBytes(val2);
-    assertEquals(val2, Utils.bytesToLong(b));
+    long timestamp = 1451606400;
+    int metricCtr = 0;
+    for (int i = 0; i < db.keys.size(); i++) {
+      System.out.println(metricCtr);
+      assertEquals(db.values.get(i).get("AA").toString(), "AAAA");
+      assertEquals(Utils.bytesToLong(db.values.get(i).get(
+          TimeseriesWorkload.TIMESTAMP_KEY).toArray()), timestamp);
+      assertNotNull(db.values.get(i).get(TimeseriesWorkload.VALUE_KEY));
+      if (i % 2 == 0) {
+        assertEquals(db.values.get(i).get("AB").toString(), "AAAB");
+      } else {
+        assertEquals(db.values.get(i).get("AB").toString(), "AAAC");
+      }
+      if (metricCtr++ > 1) {
+        assertEquals(db.keys.get(i), "AAAB");
+        if (metricCtr >= 4) {
+          metricCtr = 0;
+          timestamp += 60;
+        }
+      } else {
+        assertEquals(db.keys.get(i), "AAAA");
+      }
+    }
   }
   
-  @Test
+  @Test (expectedExceptions = WorkloadException.class)
   public void badTimeUnit() throws Exception {
     final Properties p = new Properties();
     p.put(TimeseriesWorkload.TIMESTAMP_UNITS_PROPERTY, "foobar");
@@ -53,8 +71,90 @@ public class TestTimeseriesWorkload {
     wl.init(p);
   }
   
+  @Test
+  public void insertOneKeyTwoTagsLowCardinality() throws Exception {
+    final Properties p = getUTProperties();
+    p.put(CoreWorkload.FIELD_COUNT_PROPERTY, "1");
+    final TimeseriesWorkload wl = new TimeseriesWorkload();
+    wl.init(p);
+    
+    final MockDB db = new MockDB();
+    for (int i = 0; i < 74; i++) {
+      wl.doInsert(db, null);
+    }
+    
+    assertEquals(db.keys.size(), 74);
+    assertEquals(db.values.size(), 74);
+    long timestamp = 1451606400;
+    for (int i = 0; i < db.keys.size(); i++) {
+      assertEquals(db.keys.get(i), "AAAA");
+      assertEquals(db.values.get(i).get("AA").toString(), "AAAA");
+      assertEquals(Utils.bytesToLong(db.values.get(i).get(
+          TimeseriesWorkload.TIMESTAMP_KEY).toArray()), timestamp);
+      assertNotNull(db.values.get(i).get(TimeseriesWorkload.VALUE_KEY));
+      if (i % 2 == 0) {
+        assertEquals(db.values.get(i).get("AB").toString(), "AAAB");
+      } else {
+        assertEquals(db.values.get(i).get("AB").toString(), "AAAC");
+        timestamp += 60;
+      }
+    }
+  }
+  
+  @Test
+  public void insertTwoKeysTwoTagsLowCardinality() throws Exception {
+    final Properties p = getUTProperties();
+    
+    final TimeseriesWorkload wl = new TimeseriesWorkload();
+    wl.init(p);
+    
+    final MockDB db = new MockDB();
+    for (int i = 0; i < 74; i++) {
+      wl.doInsert(db, null);
+    }
+    
+    long timestamp = 1451606400;
+    int metricCtr = 0;
+    for (int i = 0; i < db.keys.size(); i++) {
+      assertEquals(db.values.get(i).get("AA").toString(), "AAAA");
+      assertEquals(Utils.bytesToLong(db.values.get(i).get(
+          TimeseriesWorkload.TIMESTAMP_KEY).toArray()), timestamp);
+      assertNotNull(db.values.get(i).get(TimeseriesWorkload.VALUE_KEY));
+      if (i % 2 == 0) {
+        assertEquals(db.values.get(i).get("AB").toString(), "AAAB");
+      } else {
+        assertEquals(db.values.get(i).get("AB").toString(), "AAAC");
+      }
+      if (metricCtr++ > 1) {
+        assertEquals(db.keys.get(i), "AAAB");
+        if (metricCtr >= 4) {
+          metricCtr = 0;
+          timestamp += 60;
+        }
+      } else {
+        assertEquals(db.keys.get(i), "AAAA");
+      }
+    }
+  }
+  
+  private Properties getUTProperties() {
+    final Properties p = new Properties();
+    p.put(Client.RECORD_COUNT_PROPERTY, "10");
+    p.put(CoreWorkload.FIELD_COUNT_PROPERTY, "2");
+    p.put(TimeseriesWorkload.KEY_LENGTH_PROPERTY, "4");
+    p.put(TimeseriesWorkload.TAG_KEY_LENGTH_PROPERTY, "2");
+    p.put(TimeseriesWorkload.TAG_VALUE_LENGTH_PROPERTY, "4");
+    p.put(TimeseriesWorkload.TAG_COUNT_PROPERTY, "2");
+    p.put(TimeseriesWorkload.TAG_CARDINALITY_PROPERTY, "1,2");
+    p.put(TimeseriesWorkload.TIMESTAMP_START_PROPERTY, "1451606400");
+    return p;
+  }
+  
   static class MockDB extends DB {
-
+    final List<String> keys = new ArrayList<String>();
+    final List<HashMap<String, ByteIterator>> values = 
+        new ArrayList<HashMap<String, ByteIterator>>();
+    
     @Override
     public Status read(String table, String key, Set<String> fields,
         HashMap<String, ByteIterator> result) {
@@ -79,24 +179,8 @@ public class TestTimeseriesWorkload {
     @Override
     public Status insert(String table, String key,
         HashMap<String, ByteIterator> values) {
-      System.out.print("Key: " + key + " Values: {");
-      int i = 0;
-      for (final Entry<String, ByteIterator> entry : values.entrySet()) {
-        if (i > 0) {
-          System.out.print(", ");
-        }
-        System.out.print("{" + entry.getKey() + " => ");
-        if (entry.getKey().equals("YCSBV")) {
-          System.out.print(new String(Utils.bytesToDouble(entry.getValue().toArray()) + "}"));  
-        } else if (entry.getKey().equals("YCSBTS")) {
-          System.out.print(new String(Utils.bytesToLong(entry.getValue().toArray()) + "}"));
-        } else {
-          System.out.print(new String(entry.getValue().toArray()) + "}");
-        }
-        
-        ++i;
-      }
-      System.out.println("}");
+      keys.add(key);
+      this.values.add(values);
       return Status.OK;
     }
 
@@ -106,5 +190,25 @@ public class TestTimeseriesWorkload {
       return Status.OK;
     }
     
+    public void dumpStdout() {
+      for (int i = 0; i < keys.size(); i++) {
+        System.out.print("[" + i + "] Key: " + keys.get(i) + " Values: {");
+        int x = 0;
+        for (final Entry<String, ByteIterator> entry : values.get(i).entrySet()) {
+          if (x++ > 0) {
+            System.out.print(", ");
+          }
+          System.out.print("{" + entry.getKey() + " => ");
+          if (entry.getKey().equals("YCSBV")) {
+            System.out.print(new String(Utils.bytesToDouble(entry.getValue().toArray()) + "}"));  
+          } else if (entry.getKey().equals("YCSBTS")) {
+            System.out.print(new String(Utils.bytesToLong(entry.getValue().toArray()) + "}"));
+          } else {
+            System.out.print(new String(entry.getValue().toArray()) + "}");
+          }
+        }
+        System.out.println("}");
+      }
+    }
   }
 }

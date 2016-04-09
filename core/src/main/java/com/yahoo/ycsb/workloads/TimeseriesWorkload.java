@@ -19,6 +19,10 @@ import com.yahoo.ycsb.generator.IncrementingPrintableStringGenerator;
 import com.yahoo.ycsb.generator.UnixEpochTimestampGenerator;
 
 public class TimeseriesWorkload extends Workload {  
+  
+  public static final String TIMESTAMP_KEY = "YCSBTS";
+  public static final String VALUE_KEY = "YCSBV";
+  
   /** Name and default value for the timestamp interval property. */    
   public static final String TIMESTAMP_INTERVAL_PROPERTY = "timestamp_interval";    
   public static final String TIMESTAMP_INTERVAL_PROPERTY_DEFAULT = "60";    
@@ -29,13 +33,21 @@ public class TimeseriesWorkload extends Workload {
       
   /** Name for the optional starting timestamp property. */   
   public static final String TIMESTAMP_START_PROPERTY = "start_timestamp";    
-     
   
   public static final String TAG_COUNT_PROPERTY = "tag_count";
   public static final String TAG_COUNT_PROPERTY_DEFAULT = "4";
   
   public static final String TAG_CARDINALITY_PROPERTY = "tag_cardinality";
   public static final String TAG_CARDINALITY_PROPERTY_DEFAULT = "1, 2, 4, 8";
+  
+  public static final String KEY_LENGTH_PROPERTY = "key_length";
+  public static final String KEY_LENGTH_PROPERTY_DEFAULT = "8";
+  
+  public static final String TAG_KEY_LENGTH_PROPERTY = "tag_key_length";
+  public static final String TAG_KEY_LENGTH_PROPERTY_DEFAULT = "8";
+  
+  public static final String TAG_VALUE_LENGTH_PROPERTY = "tag_value_length";
+  public static final String TAG_VALUE_LENGTH_PROPERTY_DEFAULT = "8";
   
   private Generator<String> keyGenerator;
   private Generator<String> tagKeyGenerator;
@@ -56,21 +68,29 @@ public class TimeseriesWorkload extends Workload {
   private boolean rollover;
   
   @Override
-  public void init(Properties p) throws WorkloadException {
+  public void init(final Properties p) throws WorkloadException {
     recordcount =
         Integer.parseInt(p.getProperty(Client.RECORD_COUNT_PROPERTY, 
             Client.DEFAULT_RECORD_COUNT));
     if (recordcount == 0) {
       recordcount = Integer.MAX_VALUE;
     }
+    // setup the key, tag key and tag value generators
+    final int keyLength = Integer.parseInt(p.getProperty(KEY_LENGTH_PROPERTY, 
+        KEY_LENGTH_PROPERTY_DEFAULT));
+    final int tagKeyLength = Integer.parseInt(p.getProperty(
+        TAG_KEY_LENGTH_PROPERTY, TAG_KEY_LENGTH_PROPERTY_DEFAULT));
+    final int tagValueLength = Integer.parseInt(p.getProperty(
+        TAG_VALUE_LENGTH_PROPERTY, TAG_VALUE_LENGTH_PROPERTY_DEFAULT));
     
-    keyGenerator = new IncrementingPrintableStringGenerator(4);
-    tagKeyGenerator = new IncrementingPrintableStringGenerator(2);
-    tagValueGenerator = new IncrementingPrintableStringGenerator(4);
+    keyGenerator = new IncrementingPrintableStringGenerator(keyLength);
+    tagKeyGenerator = new IncrementingPrintableStringGenerator(tagKeyLength);
+    tagValueGenerator = new IncrementingPrintableStringGenerator(tagValueLength);
+    
+    // setup the cardinality
     tagPairs = Integer.parseInt(p.getProperty(TAG_COUNT_PROPERTY, 
         TAG_COUNT_PROPERTY_DEFAULT));
     tagCardinality = new int[tagPairs];
-    
     final String tagCardinalityString = p.getProperty(TAG_CARDINALITY_PROPERTY, 
         TAG_CARDINALITY_PROPERTY_DEFAULT);
     final String[] tagCardinalityParts = tagCardinalityString.split(",");
@@ -103,9 +123,9 @@ public class TimeseriesWorkload extends Workload {
         break;
       }
     }
+    
     numKeys = Integer.parseInt(p.getProperty(CoreWorkload.FIELD_COUNT_PROPERTY, 
         CoreWorkload.FIELD_COUNT_PROPERTY_DEFAULT));
-    
     keys = new String[numKeys];
     for (int i = 0; i < numKeys; ++i) {
       keys[i] = keyGenerator.nextString();
@@ -127,7 +147,6 @@ public class TimeseriesWorkload extends Workload {
     // figure out the start timestamp based on the units, cardinality and interval
     TimeUnit timeUnits;
     int timestampInterval = 0;
-    
     try {
       timestampInterval = Integer.parseInt(p.getProperty(
           TIMESTAMP_INTERVAL_PROPERTY, TIMESTAMP_INTERVAL_PROPERTY_DEFAULT));
@@ -137,7 +156,6 @@ public class TimeseriesWorkload extends Workload {
     }
     
     try {
-      
       timeUnits = TimeUnit.valueOf(p.getProperty(TIMESTAMP_UNITS_PROPERTY, 
           TIMESTAMP_UNITS_PROPERTY_DEFAULT).toUpperCase());
     } catch (IllegalArgumentException e) {
@@ -160,6 +178,13 @@ public class TimeseriesWorkload extends Workload {
             TIMESTAMP_START_PROPERTY, nfe);
       }
     }
+    // set the last value properly.
+    timestampGenerator.nextValue();
+  }
+  
+  @Override
+  public Object initThread(Properties p, int mythreadid, int threadcount) throws WorkloadException {
+    return null;
   }
   
   @Override
@@ -189,9 +214,10 @@ public class TimeseriesWorkload extends Workload {
       int tvidx = tagValueIdxs[i];
       map.put(tagKeys[i], new StringByteIterator(tagValues[i][tvidx]));
     }
-    // TODO - byte array
-    map.put("YCSBTS", new ByteArrayByteIterator(Utils.longToBytes(timestampGenerator.currentValue())));
-    map.put("YCSBV", new ByteArrayByteIterator(Utils.doubleToBytes(
+    
+    map.put(TIMESTAMP_KEY, new ByteArrayByteIterator(
+        Utils.longToBytes(timestampGenerator.currentValue())));
+    map.put(VALUE_KEY, new ByteArrayByteIterator(Utils.doubleToBytes(
         Utils.random().nextDouble() * 100000)));
     
     boolean tagRollover = false;
@@ -224,4 +250,56 @@ public class TimeseriesWorkload extends Workload {
     return key;
   }
   
+  class ThreadState {
+    
+    ThreadState() {
+    }
+    
+    private String nextDataPoint(HashMap<String, ByteIterator> map) {
+      if (rollover) {
+        timestampGenerator.nextValue();
+        rollover = false;
+      }
+      
+      final String key = keys[keyIdx];
+      for (int i = 0; i < tagPairs; ++i) {
+        int tvidx = tagValueIdxs[i];
+        map.put(tagKeys[i], new StringByteIterator(tagValues[i][tvidx]));
+      }
+      
+      map.put(TIMESTAMP_KEY, new ByteArrayByteIterator(
+          Utils.longToBytes(timestampGenerator.currentValue())));
+      map.put(VALUE_KEY, new ByteArrayByteIterator(Utils.doubleToBytes(
+          Utils.random().nextDouble() * 100000)));
+      
+      boolean tagRollover = false;
+      for (int i = tagCardinality.length - 1; i >= 0; --i) {
+        if (tagCardinality[i] <= 1) {
+          // nothing to increment here
+          continue;
+        }
+        
+        if (tagValueIdxs[i] + 1 >= tagCardinality[i]) {
+          tagValueIdxs[i] = 0;
+          if (i == firstIncrementableCardinality) {
+            tagRollover = true;
+          }
+        } else {
+           ++tagValueIdxs[i];
+           break;
+        }
+      }
+      
+      if (tagRollover) {
+        if (keyIdx + 1 >= keys.length) {
+          keyIdx = 0;
+          rollover = true;
+        } else {
+          ++keyIdx;
+        }
+      }
+      
+      return key;
+    }
+  }
 }
