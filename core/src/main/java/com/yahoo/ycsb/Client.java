@@ -369,7 +369,7 @@ class ClientThread extends Thread
       else
       {
         long startTimeNanos = _measurements.markTimestamp("STARTTRANSACTIONS", Thread.currentThread().getId());
-
+System.out.println("WRITING TO: " + _opcount);
         while (((_opcount == 0) || (_opsdone < _opcount)) && !_workload.isStopRequested())
         {
 
@@ -889,11 +889,14 @@ public class Client
     {
       if (props.containsKey(INSERT_COUNT_PROPERTY))
       {
+        
         opcount=Integer.parseInt(props.getProperty(INSERT_COUNT_PROPERTY,"0"));
+        System.out.println("USing Insert Count: " + opcount);
       }
       else
       {
         opcount=Integer.parseInt(props.getProperty(RECORD_COUNT_PROPERTY, DEFAULT_RECORD_COUNT));
+        System.out.println("USing Record Count: " + opcount);
       }
     }
 
@@ -920,6 +923,7 @@ public class Client
       {
         ++threadopcount;
       }
+      System.out.println("THREAD OPS: " + threadopcount);
 
       ClientThread t=new ClientThread(db,dotransactions,workload,props,threadopcount, targetperthreadperms, completeLatch, threadid);
       

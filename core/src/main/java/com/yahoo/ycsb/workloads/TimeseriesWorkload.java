@@ -224,9 +224,8 @@ public class TimeseriesWorkload extends Workload {
     final String keyname = keys[Utils.random().nextInt(keys.length)];
     final ThreadState state = (ThreadState)threadstate;
     
-    final int intervalsPassed = (int)((state.timestampGenerator.lastValue() - state.startTimestamp) / state.interval);
     final long timestamp = state.startTimestamp + 
-        state.timestampGenerator.getOffset(Utils.random().nextInt(intervalsPassed));
+        state.timestampGenerator.getOffset(Utils.random().nextInt(state.maxOffsets));
     
     // rando tags
     HashSet<String> fields = new HashSet<String>();
@@ -284,6 +283,8 @@ public class TimeseriesWorkload extends Workload {
     private boolean rollover;
     long startTimestamp;
     final long interval;
+    final long threadOps;
+    int maxOffsets;
     
     ThreadState(final int threadID, final int threadCount) throws WorkloadException {
       if (threadID >= threadCount) {
@@ -323,6 +324,14 @@ public class TimeseriesWorkload extends Workload {
       timestampGenerator.nextValue();
       startTimestamp = timestampGenerator.lastValue();
       interval = timestampGenerator.getOffset(1);
+      threadOps = recordcount / threadCount;
+      
+      long recordsPerTimestamp = (keyIdxEnd - keyIdxStart);
+      for (final int cardinality : tagCardinality) {
+        recordsPerTimestamp *= cardinality;
+      }
+      maxOffsets = (int)((threadOps / recordsPerTimestamp) * interval);
+      
       operationchooser = CoreWorkload.createOperationGenerator(properties);
     }
     
