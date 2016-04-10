@@ -78,4 +78,3 @@ The following options can be configured using CLI (using the `-p` parameter) or 
 * `google.bigtable.auth.json.keyfile`: (Required) A service account key for authentication.
 * `debug`: If true, prints debug information to standard out. The default is false.
 * `clientbuffering`: Whether or not to use client side buffering and batching of write operations. This can significantly improve performance and defaults to true.
-

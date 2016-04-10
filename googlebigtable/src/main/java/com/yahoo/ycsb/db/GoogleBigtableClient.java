@@ -19,31 +19,14 @@ package com.yahoo.ycsb.db;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Arrays;
-import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.BufferedMutator;
-import org.apache.hadoop.hbase.client.BufferedMutatorParams;
-import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import java.util.Set;
@@ -70,7 +53,6 @@ import com.google.cloud.bigtable.grpc.async.AsyncExecutor;
 import com.google.cloud.bigtable.grpc.async.HeapSizeManager;
 import com.google.cloud.bigtable.hbase.BigtableOptionsFactory;
 import com.google.cloud.bigtable.util.ByteStringer;
-import com.google.common.base.Preconditions;
 import com.yahoo.ycsb.ByteArrayByteIterator;
 import com.yahoo.ycsb.ByteIterator;
 import com.yahoo.ycsb.DBException;
@@ -87,7 +69,7 @@ import com.yahoo.ycsb.Status;
 public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   public static final Charset UTF8_CHARSET = Charset.forName("UTF8");
   
-  /** Property names for the CLI */
+  /** Property names for the CLI. */
   private static final String ASYNC_MUTATOR_MAX_MEMORY = "mutatorMaxMemory";
   private static final String ASYNC_MAX_INFLIGHT_RPCS = "mutatorMaxInflightRPCs";
   private static final String CLIENT_SIDE_BUFFERING = "clientbuffering";
@@ -95,59 +77,59 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
   /** Must be an object for synchronization and tracking running thread counts. */ 
   private static Integer threadCount = 0;
   
-  /** This will load the hbase-site.xml config file and/or store CLI options */
-  private final static Configuration config = HBaseConfiguration.create();
+  /** This will load the hbase-site.xml config file and/or store CLI options. */
+  private static final Configuration CONFIG = HBaseConfiguration.create();
   
-  /** Print debug information to standard out */
+  /** Print debug information to standard out. */
   private boolean debug = false;
   
-  /** Global Bigtable native API objects */ 
+  /** Global Bigtable native API objects. */ 
   private static BigtableOptions options;
   private static BigtableSession session;
   
-  /** Thread loacal Bigtable native API objects */
+  /** Thread loacal Bigtable native API objects. */
   private BigtableDataClient client;
   private HeapSizeManager heapSizeManager;
   private AsyncExecutor asyncExecutor;
   
-  /** The column family use for the workload */
+  /** The column family use for the workload. */
   private byte[] columnFamilyBytes;
   
-  /** Cache for the last table name/ID to avoid byte conversions */
+  /** Cache for the last table name/ID to avoid byte conversions. */
   private String lastTable = "";
   private byte[] lastTableBytes;
   
   /**
-   * If true, buffer mutations on the client. This is the default behavior for
-   * HBaseClient. For measuring insert/update/delete latencies, client side
-   * buffering should be disabled.
+   * If true, buffer mutations on the client. For measuring insert/update/delete 
+   * latencies, client side buffering should be disabled.
    */
-  private boolean clientSideBuffering = true;
+  private boolean clientSideBuffering = false;
 
   @Override
   public void init() throws DBException {
     Properties props = getProperties();
     
     // Defaults the user can override if needed
-    config.set("google.bigtable.auth.service.account.enable", "true");
+    CONFIG.set("google.bigtable.auth.service.account.enable", "true");
     
     // make it easy on ourselves by copying all CLI properties into the config object.
     final Iterator<Entry<Object, Object>> it = props.entrySet().iterator();
     while (it.hasNext()) {
       Entry<Object, Object> entry = it.next();
-      config.set((String)entry.getKey(), (String)entry.getValue());
+      CONFIG.set((String)entry.getKey(), (String)entry.getValue());
     }
     
-    clientSideBuffering = getProperties().getProperty(CLIENT_SIDE_BUFFERING, "true")
+    clientSideBuffering = getProperties().getProperty(CLIENT_SIDE_BUFFERING, "false")
         .equals("true") ? true : false;
     
-    System.out.println("Running Google Bigtable with Proto API" +
+    System.err.println("Running Google Bigtable with Proto API" +
          (clientSideBuffering ? " and client side buffering." : "."));
+    
     synchronized (threadCount) {
       ++threadCount;
       if (session == null) {
         try {
-          options = BigtableOptionsFactory.fromConfiguration(config);
+          options = BigtableOptionsFactory.fromConfiguration(CONFIG);
           session = new BigtableSession(options);
           // important to instantiate the first client here, otherwise the
           // other threads may receive an NPE from the options when they try
@@ -248,7 +230,7 @@ public class GoogleBigtableClient extends com.yahoo.ycsb.DB {
     
     List<Row> rows;
     try {
-        rows = client.readRowsAsync(rrr.build()).get();
+      rows = client.readRowsAsync(rrr.build()).get();
       if (rows == null || rows.isEmpty()) {
         return Status.NOT_FOUND;
       }
