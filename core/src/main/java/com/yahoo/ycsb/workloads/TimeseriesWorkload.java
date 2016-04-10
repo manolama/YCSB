@@ -2,6 +2,7 @@ package com.yahoo.ycsb.workloads;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
@@ -14,6 +15,7 @@ import com.yahoo.ycsb.StringByteIterator;
 import com.yahoo.ycsb.Utils;
 import com.yahoo.ycsb.Workload;
 import com.yahoo.ycsb.WorkloadException;
+import com.yahoo.ycsb.generator.DiscreteGenerator;
 import com.yahoo.ycsb.generator.Generator;
 import com.yahoo.ycsb.generator.IncrementingPrintableStringGenerator;
 import com.yahoo.ycsb.generator.UnixEpochTimestampGenerator;
@@ -49,6 +51,9 @@ public class TimeseriesWorkload extends Workload {
   public static final String TAG_VALUE_LENGTH_PROPERTY = "tag_value_length";
   public static final String TAG_VALUE_LENGTH_PROPERTY_DEFAULT = "8";
   
+  public static final String PAIR_DELIMITER_PROPERTY = "tag_pair_delimiter";
+  public static final String PAIR_DELIMITER_PROPERTY_DEFAULT = "=";
+  
   private Properties properties;
   
   private Generator<String> keyGenerator;
@@ -69,6 +74,8 @@ public class TimeseriesWorkload extends Workload {
   private int[] tagCardinality;
   private String[][] tagValues;
   private int firstIncrementableCardinality;
+  
+  private String tagPairDelimiter;
 
   @Override
   public void init(final Properties p) throws WorkloadException {
@@ -167,6 +174,8 @@ public class TimeseriesWorkload extends Workload {
       throw new WorkloadException("YCSB doesn't support " + timeUnits + 
           " at this time.");
     }
+    
+    tagPairDelimiter = p.getProperty(PAIR_DELIMITER_PROPERTY, PAIR_DELIMITER_PROPERTY_DEFAULT);
   }
   
   @Override
@@ -193,12 +202,79 @@ public class TimeseriesWorkload extends Workload {
 
   @Override
   public boolean doTransaction(DB db, Object threadstate) {
-    // TODO Auto-generated method stub
-    return false;
+    if (threadstate == null) {
+      //throw new WorkloadException("Missing thread state");
+      return false;
+    }
+    switch (((ThreadState)threadstate).operationchooser.nextString()) {
+    case "READ":
+      return doTransactionRead(db, threadstate);
+    case "UPDATE":
+      return doTransactionUpdate(db, threadstate);
+    case "INSERT": 
+      return doTransactionInsert(db, threadstate);
+    case "SCAN":
+      return doTransactionScan(db, threadstate);
+    default:
+      return doTransactionReadModifyWrite(db, threadstate);
+    } 
   }
 
-  class ThreadState {
-    private final UnixEpochTimestampGenerator timestampGenerator;
+  protected boolean doTransactionRead(final DB db, Object threadstate) {
+    final String keyname = keys[Utils.random().nextInt(keys.length)];
+    final ThreadState state = (ThreadState)threadstate;
+    
+    final int intervalsPassed = (int)((state.timestampGenerator.lastValue() - state.startTimestamp) / state.interval);
+    final long timestamp = state.startTimestamp + 
+        state.timestampGenerator.getOffset(Utils.random().nextInt(intervalsPassed));
+    
+    // rando tags
+    HashSet<String> fields = new HashSet<String>();
+    for (int i = 0; i < tagPairs; ++i) {
+      fields.add(tagKeys[i] + tagPairDelimiter + tagValues[i][Utils.random().nextInt(tagValues[i].length)]);
+    }
+    
+    final HashMap<String, ByteIterator> cells = new HashMap<String, ByteIterator>();
+    db.read(table, keyname, fields, cells);
+    
+    return true;
+  }
+  
+  protected boolean doTransactionUpdate(final DB db, Object threadstate) {
+    if (threadstate == null) {
+      //throw new WorkloadException("Missing thread state");
+      return false;
+    }
+    final HashMap<String, ByteIterator> tags = new HashMap<String, ByteIterator>(tagPairs);
+    final String key = ((ThreadState)threadstate).nextDataPoint(tags);
+    if (db.update(table, key, tags) == Status.OK) {
+      return true;
+    }
+    return false;
+  }
+  
+  protected boolean doTransactionInsert(final DB db, Object threadstate) {
+    return doInsert(db, threadstate);
+  }
+  
+  protected boolean doTransactionScan(final DB db, Object threadstate) {
+    return false;
+  }
+  
+  protected boolean doTransactionReadModifyWrite(final DB db, Object threadstate) {
+    return false;
+  }
+  
+  protected void verifyRow(String key, HashMap<String, ByteIterator> cells) {
+    
+  }
+  
+  /**
+   * Thread state class holding thread local generators and indices
+   */
+  protected class ThreadState {
+    protected final UnixEpochTimestampGenerator timestampGenerator;
+    protected final DiscreteGenerator operationchooser;
     
     private int keyIdx;
     private int keyIdxStart;
@@ -206,6 +282,8 @@ public class TimeseriesWorkload extends Workload {
     private int[] tagValueIdxs;
 
     private boolean rollover;
+    long startTimestamp;
+    final long interval;
     
     ThreadState(final int threadID, final int threadCount) throws WorkloadException {
       if (threadID >= threadCount) {
@@ -240,8 +318,12 @@ public class TimeseriesWorkload extends Workload {
               TIMESTAMP_START_PROPERTY, nfe);
         }
       }
-      // set the last value properly.
+      // Set the last value properly for the timestamp, otherwise it may start 
+      // one interval ago.
       timestampGenerator.nextValue();
+      startTimestamp = timestampGenerator.lastValue();
+      interval = timestampGenerator.getOffset(1);
+      operationchooser = CoreWorkload.createOperationGenerator(properties);
     }
     
     private String nextDataPoint(HashMap<String, ByteIterator> map) {
