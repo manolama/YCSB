@@ -21,6 +21,7 @@ import com.yahoo.ycsb.Status;
 import com.yahoo.ycsb.Utils;
 import com.yahoo.ycsb.WorkloadException;
 import com.yahoo.ycsb.generator.UnixEpochTimestampGenerator;
+import com.yahoo.ycsb.workloads.TimeseriesWorkload.ThreadState;
 
 import org.testng.annotations.Test;
 
@@ -307,6 +308,31 @@ public class TestTimeseriesWorkload {
     }
   }
   
+  @Test
+  public void read() throws Exception {
+    final Properties p = getUTProperties();
+    p.put(CoreWorkload.FIELD_COUNT_PROPERTY, "4");
+    final TimeseriesWorkload wl = new TimeseriesWorkload();
+    wl.init(p);
+    final Object threadState = wl.initThread(p, 0, 1);
+    
+    final MockDB db = new MockDB();
+    for (int i = 0; i < 20; i++) {
+      wl.doTransactionRead(db, threadState);
+    }
+  }
+  
+  @Test
+  public void threadState() throws Exception {
+    final Properties p = getUTProperties();
+    p.put(CoreWorkload.FIELD_COUNT_PROPERTY, "4");
+    final TimeseriesWorkload wl = new TimeseriesWorkload();
+    wl.init(p);
+    final ThreadState threadState = (ThreadState)wl.initThread(p, 0, 1);
+    
+    System.out.println(threadState.maxOffsets);
+  }
+  
   private Properties getUTProperties() {
     final Properties p = new Properties();
     p.put(Client.RECORD_COUNT_PROPERTY, "10");
@@ -328,7 +354,7 @@ public class TestTimeseriesWorkload {
     @Override
     public Status read(String table, String key, Set<String> fields,
         HashMap<String, ByteIterator> result) {
-      // TODO Auto-generated method stub
+      System.out.println("Table; " + table + "  Key: + " + key + "  Fields: " + fields);
       return Status.OK;
     }
 

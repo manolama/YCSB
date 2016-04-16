@@ -232,6 +232,7 @@ public class TimeseriesWorkload extends Workload {
     for (int i = 0; i < tagPairs; ++i) {
       fields.add(tagKeys[i] + tagPairDelimiter + tagValues[i][Utils.random().nextInt(tagValues[i].length)]);
     }
+    fields.add(TIMESTAMP_KEY + tagPairDelimiter + timestamp);
     
     final HashMap<String, ByteIterator> cells = new HashMap<String, ByteIterator>();
     db.read(table, keyname, fields, cells);
