@@ -1,12 +1,31 @@
+/**
+ * Copyright (c) 2016 YCSB contributors. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
 package com.yahoo.ycsb.db;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.Vector;
 
+import org.hbase.async.Bytes;
 import org.hbase.async.Config;
 import org.hbase.async.DeleteRequest;
 import org.hbase.async.GetRequest;
@@ -24,26 +43,53 @@ import com.yahoo.ycsb.Status;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 
+/**
+ * Alternative Java client for Apache HBase.
+ * 
+ * This client provides a subset of the main HBase client and uses a completely
+ * asynchronous pipeline for all calls. It is particularly useful for write heavy
+ * workloads. It is also compatible with almost all versions of HBase. 
+ */
 public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
+  public static final Charset UTF8_CHARSET = Charset.forName("UTF8");
+  private static final String CLIENT_SIDE_BUFFERING_PROPERTY = "clientbuffering";
+  private static final String DURABILITY_PROPERTY = "durability";
+  private static final String PREFETCH_META_PROPERTY = "prefetchmeta";
+  private static final String CONFIG_PROPERTY = "config";
+  private static final String COLUMN_FAMILY_PROPERTY = "columnfamily";
+  private static final String JOIN_TIMEOUT_PROPERTY = "jointimeout";
+  private static final String JOIN_TIMEOUT_PROPERTY_DEFAULT = "30000";
+  
+  /** Mutex for instantiating a single instance of the client */
   private static final Object MUTEX = new Object();
+  
+  /** Use for tracking running thread counts so we know when to shutdown the client. */ 
+  private static int threadCount = 0;
+  
+  /** The client that's used for all threads */
   private static HBaseClient client;
   
+  /** Print debug information to standard out. */
+  private boolean debug = false;
+  
+  /** The column family use for the workload. */
   private byte[] columnFamilyBytes;
   
+  /** Cache for the last table name/ID to avoid byte conversions. */
   private String lastTable = "";
   private byte[] lastTableBytes;
   
-  private long joinTimeout = 30000;
+  private long joinTimeout;
   
-  /**
-   * Durability to use for puts and deletes.
-   */
+  /** Whether or not to bypass the WAL for puts and deletes. */
   private boolean durability = true;
   
   /**
    * If true, buffer mutations on the client. This is the default behavior for
-   * HBaseClient. For measuring insert/update/delete latencies, client side
+   * AsyncHBase. For measuring insert/update/delete latencies, client side
    * buffering should be disabled.
+   * 
+   * A single instance of this 
    */
   private boolean clientSideBuffering = false;
   
@@ -52,26 +98,50 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
     Logger root = (Logger)LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
     root.setLevel(Level.INFO);
     
-    if (getProperties().getProperty("clientbuffering", "false")
+    if (getProperties().getProperty(CLIENT_SIDE_BUFFERING_PROPERTY, "false")
         .toLowerCase().equals("true")) {
       clientSideBuffering = true;
     }
-    if (getProperties().getProperty("durability", "true").toLowerCase().equals("false")) {
+    if (getProperties().getProperty(DURABILITY_PROPERTY, "true")
+        .toLowerCase().equals("false")) {
       durability = false;
     }
-    final String columnFamily = getProperties().getProperty("columnfamily");
+    final String columnFamily = getProperties().getProperty(COLUMN_FAMILY_PROPERTY);
     if (columnFamily == null || columnFamily.isEmpty()) {
       System.err.println("Error, must specify a columnfamily for HBase table");
       throw new DBException("No columnfamily specified");
     }
     columnFamilyBytes = columnFamily.getBytes();
     
-    final boolean prefetchMeta = getProperties().getProperty("prefetchmeta", "false")
+    if ((getProperties().getProperty("debug") != null)
+        && (getProperties().getProperty("debug").compareTo("true") == 0)) {
+      debug = true;
+    }
+    
+    joinTimeout = Integer.parseInt(getProperties().getProperty(
+        JOIN_TIMEOUT_PROPERTY, JOIN_TIMEOUT_PROPERTY_DEFAULT));
+    
+    final boolean prefetchMeta = getProperties()
+        .getProperty(PREFETCH_META_PROPERTY, "false")
         .toLowerCase().equals("true") ? true : false;
     try {
       synchronized (MUTEX) {
+        ++threadCount;
         if (client == null) {
-          final Config config = new Config("/etc/opentsdb/opentsdb.conf");
+          final String configPath = getProperties().getProperty(CONFIG_PROPERTY);
+          final Config config;
+          if (configPath == null || configPath.isEmpty()) {
+            config = new Config();
+            final Iterator<Entry<Object, Object>> iterator = getProperties()
+                 .entrySet().iterator();
+            while (iterator.hasNext()) {
+              final Entry<Object, Object> property = iterator.next();
+              config.overrideConfig((String)property.getKey(), 
+                  (String)property.getValue());
+            }
+          } else {
+            config = new Config(configPath);
+          }
           client = new HBaseClient(config);
           
           // Terminate right now if table does not exist, since the client
@@ -88,28 +158,36 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
           
           if (prefetchMeta) {
             try {
+              if (debug) {
+                System.out.println("Starting meta prefetch for table " + table);
+              }
               client.prefetchMeta(table).join(joinTimeout);
+              if (debug) {
+                System.out.println("Completed meta prefetch for table " + table);
+              }
             } catch (InterruptedException e) {
+              System.err.println("Interrupted during prefetch");
               Thread.currentThread().interrupt();
             } catch (Exception e) {
-              throw new DBException(e);
+              throw new DBException("Failed prefetch", e);
             }
           }
         }
       }
-      
     } catch (IOException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-      throw new RuntimeException("Failed instantiation", e);
+      throw new DBException("Failed instantiation of client", e);
     }
   }
   
   @Override
   public void cleanup() throws DBException {
     synchronized (MUTEX) {
-      if (client != null) {
+      --threadCount;
+      if (client != null && threadCount < 1) {
         try {
+          if (debug) {
+            System.out.println("Shutting down client");
+          }
           client.shutdown().joinUninterruptibly(joinTimeout);
         } catch (Exception e) {
           System.err.println("Failed to shutdown the AsyncHBase client "
@@ -132,6 +210,12 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
     }
     
     try {
+      if (debug) {
+        System.out.println("Doing read from HBase columnfamily " + 
+            Bytes.pretty(columnFamilyBytes));
+        System.out.println("Doing read for key: " + key);
+      }
+      
       final ArrayList<KeyValue> row = client.get(get).join(joinTimeout);
       if (row == null || row.isEmpty()) {
         return Status.NOT_FOUND;
@@ -144,6 +228,12 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
             // for a while which would mean the entire KV would hang out and won't
             // be GC'd.
             new ByteArrayByteIterator(column.value()));
+        
+        if (debug) {
+          System.out.println(
+              "Result for field: " + Bytes.pretty(column.qualifier())
+                  + " is: " + Bytes.pretty(column.value()));
+        }
       }
       return Status.OK;
     } catch (InterruptedException e) {
@@ -183,6 +273,10 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
                 // for a while which would mean the entire KV would hang out and won't
                 // be GC'd.
                 new ByteArrayByteIterator(column.value()));
+            if (debug) {
+              System.out.println("Got scan result for key: " + 
+                  Bytes.pretty(column.key()));
+            }
           }
           result.add(rowResult);
         }
@@ -206,6 +300,10 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
       HashMap<String, ByteIterator> values) {
     setTable(table);
     
+    if (debug) {
+      System.out.println("Setting up put for key: " + key);
+    }
+    
     final byte[][] qualifiers = new byte[values.size()][];
     final byte[][] byteValues = new byte[values.size()][];
     
@@ -213,6 +311,10 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
     for (final Entry<String, ByteIterator> entry : values.entrySet()) {
       qualifiers[idx] = entry.getKey().getBytes();
       byteValues[idx++] = entry.getValue().toArray();
+      if (debug) {
+        System.out.println("Adding field/value " + entry.getKey() + "/"
+            + Bytes.pretty(entry.getValue().toArray()) + " to put request");
+      }
     }
     
     final PutRequest put = new PutRequest(lastTableBytes, key.getBytes(), 
@@ -250,6 +352,10 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
   @Override
   public Status delete(String table, String key) {
     setTable(table);
+    
+    if (debug) {
+      System.out.println("Doing delete for key: " + key);
+    }
     
     final DeleteRequest delete = new DeleteRequest(
         lastTableBytes, key.getBytes(), columnFamilyBytes);
