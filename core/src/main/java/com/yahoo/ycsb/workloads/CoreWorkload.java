@@ -773,54 +773,7 @@ public class CoreWorkload extends Workload {
       transactioninsertkeysequence.acknowledge(keynum);
     }
   }
-
-  /**
-   * Creates a weighted discrete values with database operations for a workload to perform.
-   * Weights/proportions are read from the properties list and defaults are used
-   * when values are not configured.
-   * Current operations are "READ", "UPDATE", "INSERT", "SCAN" and "READMODIFYWRITE".
-   * @param p The properties list to pull weights from.
-   * @return A generator that can be used to determine the next operation to perform.
-   * @throws IllegalArgumentException if the properties object was null.
-   */
-  public static DiscreteGenerator createOperationGenerator(final Properties p) {
-    if (p == null) {
-      throw new IllegalArgumentException("Properties object cannot be null");
-    }
-    final double readproportion = Double.parseDouble(
-        p.getProperty(READ_PROPORTION_PROPERTY, READ_PROPORTION_PROPERTY_DEFAULT));
-    final double updateproportion = Double.parseDouble(
-        p.getProperty(UPDATE_PROPORTION_PROPERTY, UPDATE_PROPORTION_PROPERTY_DEFAULT));
-    final double insertproportion = Double.parseDouble(
-        p.getProperty(INSERT_PROPORTION_PROPERTY, INSERT_PROPORTION_PROPERTY_DEFAULT));
-    final double scanproportion = Double.parseDouble(
-        p.getProperty(SCAN_PROPORTION_PROPERTY, SCAN_PROPORTION_PROPERTY_DEFAULT));
-    final double readmodifywriteproportion = Double.parseDouble(p.getProperty(
-        READMODIFYWRITE_PROPORTION_PROPERTY, READMODIFYWRITE_PROPORTION_PROPERTY_DEFAULT));
-    
-    final DiscreteGenerator operationchooser = new DiscreteGenerator();
-    if (readproportion > 0) {
-      operationchooser.addValue(readproportion, "READ");
-    }
-
-    if (updateproportion > 0) {
-      operationchooser.addValue(updateproportion, "UPDATE");
-    }
-
-    if (insertproportion > 0) {
-      operationchooser.addValue(insertproportion, "INSERT");
-    }
-
-    if (scanproportion > 0) {
-      operationchooser.addValue(scanproportion, "SCAN");
-    }
-
-    if (readmodifywriteproportion > 0) {
-      operationchooser.addValue(readmodifywriteproportion, "READMODIFYWRITE");
-    }
-    return operationchooser;
-  }
-
+  
   /**
    * Creates a weighted discrete values with database operations for a workload to perform.
    * Weights/proportions are read from the properties list and defaults are used
