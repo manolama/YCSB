@@ -19,14 +19,15 @@ package com.yahoo.ycsb.generator;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Set;
 
 /**
  * A generator that produces strings of {@link #length} using a set of code points
  * from {@link #characterSet}. Each time {@link #nextValue()} is executed, the string
  * is incremented by one character. Eventually the string may rollover to the beginning
- * and the user may choose to have the generator throw an exception at that point or
- * continue incrementing. (By default the generator will continue incrementing).
+ * and the user may choose to have the generator throw a NoSuchElementException at that 
+ * point or continue incrementing. (By default the generator will continue incrementing).
  * <p>
  * For example, if we set a length of 2 characters and the character set includes
  * [A, B] then the generator output will be:
@@ -43,11 +44,14 @@ import java.util.Set;
  */
 public class IncrementingPrintableStringGenerator extends Generator<String> {
 
+  /** Default string length for the generator. */
+  public static final int DEFAULTSTRINGLENGTH = 8;
+  
   /**
    * Set of all character types that include every symbol other than non-printable
    * control characters.
    */
-  public final static Set<Integer> CHAR_TYPES_ALL_BUT_CONTROL;
+  public static final Set<Integer> CHAR_TYPES_ALL_BUT_CONTROL;
   static {
     CHAR_TYPES_ALL_BUT_CONTROL = new HashSet<Integer>(24);
     // numbers
@@ -90,7 +94,7 @@ public class IncrementingPrintableStringGenerator extends Generator<String> {
   /**
    * Set of character types including only decimals, upper and lower case letters.
    */
-  public final static Set<Integer> CHAR_TYPES_BASIC_ALPHA;
+  public static final Set<Integer> CHAR_TYPES_BASIC_ALPHA;
   static {
     CHAR_TYPES_BASIC_ALPHA = new HashSet<Integer>(2);
     CHAR_TYPES_BASIC_ALPHA.add((int)Character.UPPERCASE_LETTER);
@@ -100,7 +104,7 @@ public class IncrementingPrintableStringGenerator extends Generator<String> {
   /**
    * Set of character types including only  decimals, upper and lower case letters.
    */
-  public final static Set<Integer> CHAR_TYPES_BASIC_ALPHANUMERICS;
+  public static final Set<Integer> CHAR_TYPES_BASIC_ALPHANUMERICS;
   static {
     CHAR_TYPES_BASIC_ALPHANUMERICS = new HashSet<Integer>(3);
     CHAR_TYPES_BASIC_ALPHANUMERICS.add((int)Character.DECIMAL_DIGIT_NUMBER);
@@ -113,7 +117,7 @@ public class IncrementingPrintableStringGenerator extends Generator<String> {
    * other numbers, upper, lower, title case as well as letter modifiers 
    * and other letters.
    */
-  public final static Set<Integer> CHAR_TYPE_EXTENDED_ALPHANUMERICS;
+  public static final Set<Integer> CHAR_TYPE_EXTENDED_ALPHANUMERICS;
   static {
     CHAR_TYPE_EXTENDED_ALPHANUMERICS = new HashSet<Integer>(8);
     CHAR_TYPE_EXTENDED_ALPHANUMERICS.add((int)Character.DECIMAL_DIGIT_NUMBER);
@@ -150,8 +154,7 @@ public class IncrementingPrintableStringGenerator extends Generator<String> {
    * characters from the ASCII set. 
    */
   public IncrementingPrintableStringGenerator() {
-    this(RandomPrintableStringGenerator.DEFAULTSTRINGLENGTH,
-        printableBasicAlphaASCIISet());
+    this(DEFAULTSTRINGLENGTH, printableBasicAlphaASCIISet());
   }
   
   /**
@@ -188,7 +191,7 @@ public class IncrementingPrintableStringGenerator extends Generator<String> {
   @Override
   public String nextValue() {
     if (hasRolledOver && throwExceptionOnRollover) {
-      throw new RuntimeException("The generator has rolled over to the beginning");
+      throw new NoSuchElementException("The generator has rolled over to the beginning");
     }
     
     final StringBuilder buffer = new StringBuilder(length);
@@ -354,7 +357,7 @@ public class IncrementingPrintableStringGenerator extends Generator<String> {
     
     for (int codePoint = startCodePoint; codePoint <= lastCodePoint; ++codePoint) {
       if (allowableTypes != null && 
-         !allowableTypes.contains(Character.getType(codePoint))) {
+          !allowableTypes.contains(Character.getType(codePoint))) {
         continue;
       } else {
         // skip control points, formats, surrogates, etc

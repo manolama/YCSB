@@ -19,4 +19,3 @@
  * The YCSB binding for HBase using the AsyncHBase client.
  */
 package com.yahoo.ycsb.db;
-

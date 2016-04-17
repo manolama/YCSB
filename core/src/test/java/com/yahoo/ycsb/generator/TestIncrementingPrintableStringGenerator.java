@@ -20,6 +20,8 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNull;
 import static org.testng.Assert.fail;
 
+import java.util.NoSuchElementException;
+
 import org.testng.annotations.Test;
 
 public class TestIncrementingPrintableStringGenerator {
@@ -75,8 +77,8 @@ public class TestIncrementingPrintableStringGenerator {
         ++i;
         gen.nextValue();
       }
-      fail("Expected RuntimeException");
-    } catch (RuntimeException e) {
+      fail("Expected NoSuchElementException");
+    } catch (NoSuchElementException e) {
       assertEquals(i, 10);
     }
   }
@@ -94,8 +96,8 @@ public class TestIncrementingPrintableStringGenerator {
         ++i;
         gen.nextValue();
       }
-      fail("Expected RuntimeException");
-    } catch (RuntimeException e) {
+      fail("Expected NoSuchElementException");
+    } catch (NoSuchElementException e) {
       assertEquals(i, 2);
     }
   }

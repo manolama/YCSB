@@ -33,22 +33,18 @@ import org.hbase.async.HBaseClient;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
 import org.hbase.async.Scanner;
-import org.slf4j.LoggerFactory;
 
 import com.yahoo.ycsb.ByteArrayByteIterator;
 import com.yahoo.ycsb.ByteIterator;
 import com.yahoo.ycsb.DBException;
 import com.yahoo.ycsb.Status;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-
 /**
  * Alternative Java client for Apache HBase.
  * 
  * This client provides a subset of the main HBase client and uses a completely
  * asynchronous pipeline for all calls. It is particularly useful for write heavy
- * workloads. It is also compatible with almost all versions of HBase. 
+ * workloads. It is also compatible with all production versions of HBase. 
  */
 public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
   public static final Charset UTF8_CHARSET = Charset.forName("UTF8");
@@ -60,13 +56,13 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
   private static final String JOIN_TIMEOUT_PROPERTY = "jointimeout";
   private static final String JOIN_TIMEOUT_PROPERTY_DEFAULT = "30000";
   
-  /** Mutex for instantiating a single instance of the client */
+  /** Mutex for instantiating a single instance of the client. */
   private static final Object MUTEX = new Object();
   
   /** Use for tracking running thread counts so we know when to shutdown the client. */ 
   private static int threadCount = 0;
   
-  /** The client that's used for all threads */
+  /** The client that's used for all threads. */
   private static HBaseClient client;
   
   /** Print debug information to standard out. */
@@ -95,9 +91,6 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
   
   @Override
   public void init() throws DBException {
-    Logger root = (Logger)LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-    root.setLevel(Level.INFO);
-    
     if (getProperties().getProperty(CLIENT_SIDE_BUFFERING_PROPERTY, "false")
         .toLowerCase().equals("true")) {
       clientSideBuffering = true;
@@ -254,7 +247,7 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
     
     final Scanner scanner = client.newScanner(lastTableBytes);
     scanner.setFamily(columnFamilyBytes);
-    scanner.setStartKey(startkey);
+    scanner.setStartKey(startkey.getBytes(UTF8_CHARSET));
     // No end key... *sniff*
     if (fields != null) {
       scanner.setQualifiers(getQualifierList(fields));
@@ -263,6 +256,7 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
     // no filters? *sniff*
     ArrayList<ArrayList<KeyValue>> rows = null;
     try {
+      int numResults = 0;
       while ((rows = scanner.nextRows().join(joinTimeout)) != null) {
         for (final ArrayList<KeyValue> row : rows) {
           final HashMap<String, ByteIterator> rowResult =
@@ -279,6 +273,11 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
             }
           }
           result.add(rowResult);
+          numResults++;
+
+          if (numResults >= recordcount) {// if hit recordcount, bail out
+            break;
+          }
         }
       }
       scanner.close().join(joinTimeout);
@@ -395,9 +394,9 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
   }
   
   /**
-   * Little helper to build a qualifier byte array from a field set
-   * @param fields The fields to fetch
-   * @return The column qualifier byte arrays
+   * Little helper to build a qualifier byte array from a field set.
+   * @param fields The fields to fetch.
+   * @return The column qualifier byte arrays.
    */
   private byte[][] getQualifierList(final Set<String> fields) {
     final byte[][] qualifiers = new byte[fields.size()][];
