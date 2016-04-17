@@ -200,8 +200,8 @@ public class Utils
       }
       
       /** @return The currently used memory in megabytes. */
-      public static long getUsedMemoryMegaBytes() {
-        return getUsedMemoryBytes() / 1024 / 1024;
+      public static int getUsedMemoryMegaBytes() {
+        return (int)getUsedMemoryBytes() / 1024 / 1024;
       }
       
       /** @return The current system load average if supported by the JDK. 
