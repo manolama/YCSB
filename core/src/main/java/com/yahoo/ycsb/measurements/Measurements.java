@@ -213,11 +213,12 @@ public class Measurements {
     return ts;
   }
   
-  public void recordStaticMeasure(final String operation, final int latency) {
-    OneMeasurement m = new OneMeasurementSingle(operation);
-    m.measure(latency);
-    _opToMesurementMap.put(operation, m);
-  }
+//  public void recordStaticMeasure(final String operation, final int latency) {
+//    //OneMeasurement m = new OneMeasurementSingle(operation);
+//    OneMeasurement m = new OneMeasurementRaw(operation, measurementproperties);
+//    m.measure(latency);
+//    _opToMesurementMap.put(operation, m);
+//  }
   
   /**
    * Report a single value of a single metric. E.g. for read latency, operation="READ" and latency is the measured

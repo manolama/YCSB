@@ -46,6 +46,9 @@ class StatusThread extends Thread
 {
   /** Counts down each of the clients completing. */
   private final CountDownLatch _completeLatch;
+  
+  /** Stores the measurements for the run. */
+  private final Measurements _measurements;
 
   /** The clients that are running. */
   private final List<ClientThread> _clients;
@@ -79,6 +82,7 @@ class StatusThread extends Thread
     _label=label;
     _standardstatus=standardstatus;
     _sleeptimeNs=TimeUnit.SECONDS.toNanos(statusIntervalSeconds);
+    _measurements = Measurements.getMeasurements();
   }
 
   /**
@@ -108,18 +112,23 @@ class StatusThread extends Thread
       if (threads > _maxThreads) {
         _maxThreads = threads;
       }
-      System.out.println("******* SCHEDULE HERE");
-      System.out.println("ACTIVE THREADS: " + threads);
+//      System.out.println("******* SCHEDULE HERE");
+//      System.out.println("ACTIVE THREADS: " + threads);
       
       Runtime rt = Runtime.getRuntime();
       long usedMem = rt.totalMemory() - rt.freeMemory();
       if (usedMem < _minUsedMem) {
-        
+        _minUsedMem = usedMem;
       }
       if (usedMem > _maxUsedMem) {
         _maxUsedMem = usedMem;
       }
-      System.out.println("USED: " + usedMem);
+      
+      _measurements.measure("MIN_THREADS", _minThreads);
+      _measurements.measure("MAX_THREADS", _maxThreads);
+      System.out.println("MEM: " + (_maxUsedMem / 1024 / 1024));
+      _measurements.measure("MIN_MEMORY", (int)(_minUsedMem / 1024 / 1024));
+      _measurements.measure("MAX_THREADS", (int)(_maxUsedMem / 1024 / 1024));
       
       lastTotalOps = computeStats(startTimeMs, startIntervalMs, nowMs, lastTotalOps);
 
@@ -343,7 +352,7 @@ class ClientThread extends Thread
       _db.init();
       final long end = _measurements.markTimestamp("DBINITCOMPLETE", _threadid);
       
-      _measurements.recordStaticMeasure("INITLATENCY_" + _threadid, (int)(end - start) / 1000);
+      _measurements.measure("INITLATENCY_" + _threadid, (int)(end - start) / 1000);
     }
     catch (DBException e)
     {
@@ -356,7 +365,7 @@ class ClientThread extends Thread
     {
       long ts = _measurements.markTimestamp("WORKLOADINIT", _threadid);
       _workloadstate=_workload.initThread(_props,_threadid,_threadcount);
-      _measurements.recordStaticMeasure("WORKLOADINIT_LATENCY" + _threadid, (int)(System.nanoTime() - ts) / 1000);
+      _measurements.measure("WORKLOADINIT_LATENCY" + _threadid, (int)(System.nanoTime() - ts) / 1000);
     }
     catch (WorkloadException e)
     {
@@ -425,7 +434,7 @@ System.out.println("WRITING TO: " + _opcount);
       _measurements.setIntendedStartTimeNs(0);
       long cleanup = _measurements.markTimestamp("ENDTRANSACTIONS", _threadid);
       _db.cleanup();
-      _measurements.recordStaticMeasure("CLEANUP_LATENCY_" + _threadid, (int)(System.nanoTime() - cleanup) / 1000);
+      _measurements.measure("CLEANUP_LATENCY_" + _threadid, (int)(System.nanoTime() - cleanup) / 1000);
     }
     catch (DBException e)
     {
