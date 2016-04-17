@@ -55,6 +55,12 @@ class StatusThread extends Thread
 
   /** The interval for reporting status. */
   private long _sleeptimeNs;
+  
+  private int _maxThreads;
+  private int _minThreads = Integer.MAX_VALUE;
+  
+  private long _maxUsedMem;
+  private long _minUsedMem = Long.MAX_VALUE;
 
   /**
    * Creates a new StatusThread.
@@ -92,7 +98,29 @@ class StatusThread extends Thread
     do
     {
       long nowMs=System.currentTimeMillis();
-
+      
+      // Note this isn't a perfect measure but is good enough for comarative
+      // purposes.
+      int threads = Thread.activeCount();
+      if (threads < _minThreads) {
+        _minThreads = threads;
+      }
+      if (threads > _maxThreads) {
+        _maxThreads = threads;
+      }
+      System.out.println("******* SCHEDULE HERE");
+      System.out.println("ACTIVE THREADS: " + threads);
+      
+      Runtime rt = Runtime.getRuntime();
+      long usedMem = rt.totalMemory() - rt.freeMemory();
+      if (usedMem < _minUsedMem) {
+        
+      }
+      if (usedMem > _maxUsedMem) {
+        _maxUsedMem = usedMem;
+      }
+      System.out.println("USED: " + usedMem);
+      
       lastTotalOps = computeStats(startTimeMs, startIntervalMs, nowMs, lastTotalOps);
 
       alldone = waitForClientsUntil(deadline);
@@ -102,6 +130,7 @@ class StatusThread extends Thread
     }
     while (!alldone);
 
+    System.out.println("MAX T: " + _maxThreads + "  MIN T: " + _minThreads + "  MAX M: " + _maxUsedMem + "  MIN M: " + _minUsedMem);
     // Print the final stats.
     computeStats(startTimeMs, startIntervalMs, System.currentTimeMillis(), lastTotalOps);
   }
