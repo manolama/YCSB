@@ -178,7 +178,7 @@ public class Utils
       public static byte[] doubleToBytes(final double val) {
         return longToBytes(Double.doubleToRawLongBits(val));
       }
-
+      
       /**
        * Measure the estimated active thread count in the current thread group.
        * Since this calls {@link Thread.activeCount} it should be called from the
@@ -201,7 +201,7 @@ public class Utils
       
       /** @return The currently used memory in megabytes. */
       public static int getUsedMemoryMegaBytes() {
-        return (int)getUsedMemoryBytes() / 1024 / 1024;
+        return (int)(getUsedMemoryBytes() / 1024 / 1024);
       }
       
       /** @return The current system load average if supported by the JDK. 
