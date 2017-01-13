@@ -19,6 +19,7 @@ package com.yahoo.ycsb.db;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map.Entry;
@@ -266,7 +267,7 @@ public class AsyncHBaseClient extends com.yahoo.ycsb.DB {
                 // TODO - do we need to clone this array? YCSB may keep it in memory
                 // for a while which would mean the entire KV would hang out and won't
                 // be GC'd.
-                new ByteArrayByteIterator(column.value()));
+                new ByteArrayByteIterator(Arrays.copyOf(column.value(), column.value().length)));
             if (debug) {
               System.out.println("Got scan result for key: " + 
                   Bytes.pretty(column.key()));

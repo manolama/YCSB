@@ -8,15 +8,15 @@ my $bin = "bin/ycsb";
 my $status_interval = "1";
 my $hdrout = "false";
 
-my $mode = 2;  # 0 = run ycsb, 1 = run repeating, 2 = gen csv
+my $mode = 1;  # 0 = run ycsb, 1 = run repeating, 2 = gen csv
 
-my $threads = 1;
+my $threads = 8;
 my $repeats = 50;
 my @ops = ("load", "run");
 my @dbs = ("asynchbase", "hbase10");
 my $dps = 100000;
 my @db_options = ("-p columnfamily=cf", "-p columnfamily=cf");
-my @workloads = ("workloada");
+my @workloads = ("workloade");
 
 if ($mode == 0) {
   
@@ -41,6 +41,7 @@ sub runWorkloadsRepeating {
           $cmd .= "-p hdrhistogram.output.path=$file_prefix ";
           $cmd .= "-p exporter=com.yahoo.ycsb.measurements.exporter.JSONArrayMeasurementsExporter ";
           $cmd .= "-p exportfile=$file_prefix.json ";
+          $cmd .= "-p dataintegrity=true ";
           $cmd .= $db_options[$db_idx];
           
           print("Running command: $cmd\n");
@@ -91,7 +92,7 @@ sub processIntoCSVs {
   my @hbase_run_types;
   
   foreach my $file (@files) {
-    if ($file =~ /\.csv$/) {
+    if (!($file =~ /\.json$/)) {
       next;
     }
     
