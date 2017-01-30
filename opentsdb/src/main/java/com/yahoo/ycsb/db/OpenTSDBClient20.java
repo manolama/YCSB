@@ -66,10 +66,13 @@ public class OpenTSDBClient20 extends com.yahoo.ycsb.DB {
     if (true) {
       System.out.println("Key: " + key);
       for (final Entry<String, ByteIterator> entry : values.entrySet()) {
+        
         if (entry.getKey().equals("YCSBV")) {
-          System.out.println("  Field: " + entry.getKey() + "  Val: " + ((NumericByteIterator)entry.getValue()).getDouble());
+          final NumericByteIterator it = (NumericByteIterator) entry.getValue();
+          System.out.println("  Field: " + entry.getKey() + "  Val: " + it.getLong());
         } else if (entry.getKey().equals("YCSBTS")) {
-          System.out.println("  Field: " + entry.getKey() + "  Val: " + ((NumericByteIterator)entry.getValue()).getLong());
+          final NumericByteIterator it = (NumericByteIterator) entry.getValue();
+          System.out.println("  Field: " + entry.getKey() + "  Val: " + it.getLong());
         } else {
           //System.out.println("  Field: " + entry.getKey() + "  Val: " + entry.getValue().toString());
         }

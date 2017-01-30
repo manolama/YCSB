@@ -295,15 +295,17 @@ public class TimeseriesWorkload extends Workload {
     final TreeMap<String, String> validationTags = new TreeMap<String, String>();
     for (final Entry<String, ByteIterator> entry : cells.entrySet()) {
       if (entry.getKey().equals(TIMESTAMP_KEY)) {
-        timestamp = Utils.bytesToLong(entry.getValue().toArray());
+        final NumericByteIterator it = (NumericByteIterator) entry.getValue();
+        timestamp = it.getLong();
       } else if (entry.getKey().equals(VALUE_KEY)) {
-        value = Utils.bytesToDouble(entry.getValue().toArray());
+        final NumericByteIterator it = (NumericByteIterator) entry.getValue();
+        value = it.getLong();
       } else {
         validationTags.put(entry.getKey(), entry.getValue().toString());
       }
     }
 
-    if (Math.abs(validationFunction(key, timestamp, validationTags) - value) > 1E7) {
+    if (validationFunction(key, timestamp, validationTags) != value) {
       verifyStatus = Status.UNEXPECTED_STATE;
     }
     long endTime = System.nanoTime();
@@ -418,8 +420,7 @@ public class TimeseriesWorkload extends Workload {
         }
       }
       
-      map.put(TIMESTAMP_KEY, new ByteArrayByteIterator(
-          Utils.longToBytes(timestampGenerator.currentValue())));
+      map.put(TIMESTAMP_KEY, new NumericByteIterator(timestampGenerator.currentValue()));
       if (dataintegrity) {
         map.put(VALUE_KEY, new NumericByteIterator(validationFunction(key, 
             timestampGenerator.currentValue(), validationTags)));

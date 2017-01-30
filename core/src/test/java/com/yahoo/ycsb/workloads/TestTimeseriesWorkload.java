@@ -19,6 +19,7 @@ import com.yahoo.ycsb.ByteArrayByteIterator;
 import com.yahoo.ycsb.ByteIterator;
 import com.yahoo.ycsb.Client;
 import com.yahoo.ycsb.DB;
+import com.yahoo.ycsb.NumericByteIterator;
 import com.yahoo.ycsb.Status;
 import com.yahoo.ycsb.StringByteIterator;
 import com.yahoo.ycsb.Utils;
@@ -97,7 +98,7 @@ public class TestTimeseriesWorkload {
   public void badTimeUnit() throws Exception {
     final Properties p = new Properties();
     p.put(TimeseriesWorkload.TIMESTAMP_UNITS_PROPERTY, "foobar");
-    final TimeseriesWorkload wl = getWorkload(p, true);
+    getWorkload(p, true);
   }
   
   @Test (expectedExceptions = WorkloadException.class)
@@ -145,7 +146,8 @@ public class TestTimeseriesWorkload {
       assertEquals(db.values.get(i).get("AA").toString(), "AAAA");
       assertEquals(Utils.bytesToLong(db.values.get(i).get(
           TimeseriesWorkload.TIMESTAMP_KEY).toArray()), timestamp);
-      assertNotNull(db.values.get(i).get(TimeseriesWorkload.VALUE_KEY));
+      assertTrue(((NumericByteIterator) db.values.get(i)
+          .get(TimeseriesWorkload.VALUE_KEY)).isFloatingPoint());
       if (i % 2 == 0) {
         assertEquals(db.values.get(i).get("AB").toString(), "AAAB");
       } else {
@@ -175,7 +177,8 @@ public class TestTimeseriesWorkload {
       assertEquals(db.values.get(i).get("AA").toString(), "AAAA");
       assertEquals(Utils.bytesToLong(db.values.get(i).get(
           TimeseriesWorkload.TIMESTAMP_KEY).toArray()), timestamp);
-      assertNotNull(db.values.get(i).get(TimeseriesWorkload.VALUE_KEY));
+      assertTrue(((NumericByteIterator) db.values.get(i)
+          .get(TimeseriesWorkload.VALUE_KEY)).isFloatingPoint());
       if (i % 2 == 0) {
         assertEquals(db.values.get(i).get("AB").toString(), "AAAB");
       } else {
@@ -213,7 +216,8 @@ public class TestTimeseriesWorkload {
       assertEquals(db.values.get(i).get("AA").toString(), "AAAA");
       assertEquals(Utils.bytesToLong(db.values.get(i).get(
           TimeseriesWorkload.TIMESTAMP_KEY).toArray()), timestamp);
-      assertNotNull(db.values.get(i).get(TimeseriesWorkload.VALUE_KEY));
+      assertTrue(((NumericByteIterator) db.values.get(i)
+          .get(TimeseriesWorkload.VALUE_KEY)).isFloatingPoint());
       if (i % 2 == 0) {
         assertEquals(db.values.get(i).get("AB").toString(), "AAAB");
       } else {
@@ -268,7 +272,8 @@ public class TestTimeseriesWorkload {
       assertEquals(db.values.get(i).get("AA").toString(), "AAAA");
       assertEquals(Utils.bytesToLong(db.values.get(i).get(
           TimeseriesWorkload.TIMESTAMP_KEY).toArray()), timestamp);
-      assertNotNull(db.values.get(i).get(TimeseriesWorkload.VALUE_KEY));
+      assertTrue(((NumericByteIterator) db.values.get(i)
+          .get(TimeseriesWorkload.VALUE_KEY)).isFloatingPoint());
       if (i % 2 == 0) {
         assertEquals(db.values.get(i).get("AB").toString(), "AAAB");
       } else {
@@ -308,6 +313,51 @@ public class TestTimeseriesWorkload {
   }
   
   @Test
+  public void insertWithValidation() throws Exception {
+    final Properties p = getUTProperties();
+    p.put(CoreWorkload.FIELD_COUNT_PROPERTY, "1");
+    p.put(CoreWorkload.DATA_INTEGRITY_PROPERTY, "true");
+    final TimeseriesWorkload wl = getWorkload(p, true);
+    final Object threadState = wl.initThread(p, 0, 1);
+    
+    final MockDB db = new MockDB();
+    for (int i = 0; i < 74; i++) {
+      assertTrue(wl.doInsert(db, threadState));
+    }
+    
+    assertEquals(db.keys.size(), 74);
+    assertEquals(db.values.size(), 74);
+    long timestamp = 1451606400;
+    for (int i = 0; i < db.keys.size(); i++) {
+      assertEquals(db.keys.get(i), "AAAA");
+      assertEquals(db.values.get(i).get("AA").toString(), "AAAA");
+      assertEquals(Utils.bytesToLong(db.values.get(i).get(
+          TimeseriesWorkload.TIMESTAMP_KEY).toArray()), timestamp);
+      assertFalse(((NumericByteIterator) db.values.get(i)
+          .get(TimeseriesWorkload.VALUE_KEY)).isFloatingPoint());
+      
+      // validation check
+      final TreeMap<String, String> validationTags = new TreeMap<String, String>();
+      for (final Entry<String, ByteIterator> entry : db.values.get(i).entrySet()) {
+        if (entry.getKey().equals(TimeseriesWorkload.VALUE_KEY) || 
+            entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
+          continue;
+        }
+        validationTags.put(entry.getKey(), entry.getValue().toString());
+      }
+      assertEquals(wl.validationFunction(db.keys.get(i), timestamp, validationTags), 
+          ((NumericByteIterator) db.values.get(i).get(TimeseriesWorkload.VALUE_KEY)).getLong());
+      
+      if (i % 2 == 0) {
+        assertEquals(db.values.get(i).get("AB").toString(), "AAAB");
+      } else {
+        assertEquals(db.values.get(i).get("AB").toString(), "AAAC");
+        timestamp += 60;
+      }
+    }
+  }
+  
+  @Test
   public void read() throws Exception {
     final Properties p = getUTProperties();
     p.put(CoreWorkload.FIELD_COUNT_PROPERTY, "4");
@@ -334,10 +384,8 @@ public class TestTimeseriesWorkload {
     cells.put("AB", new StringByteIterator("AAAB"));
     long hash = wl.validationFunction("AAAA", 1451606400L, validationTags);
         
-    cells.put(TimeseriesWorkload.TIMESTAMP_KEY, new ByteArrayByteIterator(
-        Utils.longToBytes(1451606400L)));
-    cells.put(TimeseriesWorkload.VALUE_KEY, new ByteArrayByteIterator(
-        Utils.doubleToBytes(hash)));
+    cells.put(TimeseriesWorkload.TIMESTAMP_KEY, new NumericByteIterator(1451606400L));
+    cells.put(TimeseriesWorkload.VALUE_KEY, new NumericByteIterator(hash));
     
     assertEquals(wl.verifyRow("AAAA", cells), Status.OK);
     
@@ -345,8 +393,14 @@ public class TestTimeseriesWorkload {
     for (final ByteIterator it : cells.values()) {
       it.reset();
     }
-    cells.put(TimeseriesWorkload.VALUE_KEY, new ByteArrayByteIterator(
-        Utils.doubleToBytes((double) (hash - 1))));
+    cells.put(TimeseriesWorkload.VALUE_KEY, new NumericByteIterator(hash + 1));
+    assertEquals(wl.verifyRow("AAAA", cells), Status.UNEXPECTED_STATE);
+    
+    // no value cell, returns an unexpected state
+    for (final ByteIterator it : cells.values()) {
+      it.reset();
+    }
+    cells.remove(TimeseriesWorkload.VALUE_KEY);
     assertEquals(wl.verifyRow("AAAA", cells), Status.UNEXPECTED_STATE);
   }
   
@@ -355,7 +409,7 @@ public class TestTimeseriesWorkload {
     final Properties p = getUTProperties();
     p.put(CoreWorkload.FIELD_COUNT_PROPERTY, "4");
     final TimeseriesWorkload wl = getWorkload(p, true);
-    final ThreadState threadState = (ThreadState)wl.initThread(p, 0, 1);
+    final ThreadState threadState = (ThreadState) wl.initThread(p, 0, 1);
     
     System.out.println(threadState.maxOffsets);
   }
