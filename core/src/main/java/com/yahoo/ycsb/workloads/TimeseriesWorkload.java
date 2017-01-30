@@ -3,13 +3,16 @@ package com.yahoo.ycsb.workloads;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map.Entry;
 import java.util.Properties;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 
 import com.yahoo.ycsb.ByteArrayByteIterator;
 import com.yahoo.ycsb.ByteIterator;
 import com.yahoo.ycsb.Client;
 import com.yahoo.ycsb.DB;
+import com.yahoo.ycsb.NumericByteIterator;
 import com.yahoo.ycsb.Status;
 import com.yahoo.ycsb.StringByteIterator;
 import com.yahoo.ycsb.Utils;
@@ -19,6 +22,7 @@ import com.yahoo.ycsb.generator.DiscreteGenerator;
 import com.yahoo.ycsb.generator.Generator;
 import com.yahoo.ycsb.generator.IncrementingPrintableStringGenerator;
 import com.yahoo.ycsb.generator.UnixEpochTimestampGenerator;
+import com.yahoo.ycsb.measurements.Measurements;
 
 public class TimeseriesWorkload extends Workload {  
   
@@ -77,6 +81,14 @@ public class TimeseriesWorkload extends Workload {
   
   private String tagPairDelimiter;
 
+  /**
+   * Set to true if want to check correctness of reads. Must also
+   * be set to true during loading phase to function.
+   */
+  private boolean dataintegrity;
+  
+  private Measurements _measurements = Measurements.getMeasurements();
+  
   @Override
   public void init(final Properties p) throws WorkloadException {
     properties = p;
@@ -176,10 +188,15 @@ public class TimeseriesWorkload extends Workload {
     }
     
     tagPairDelimiter = p.getProperty(PAIR_DELIMITER_PROPERTY, PAIR_DELIMITER_PROPERTY_DEFAULT);
+    
+    dataintegrity = Boolean.parseBoolean(
+        p.getProperty(CoreWorkload.DATA_INTEGRITY_PROPERTY, 
+            CoreWorkload.DATA_INTEGRITY_PROPERTY_DEFAULT));
   }
   
   @Override
   public Object initThread(Properties p, int mythreadid, int threadcount) throws WorkloadException {
+    System.out.println("INITALIZING: " + mythreadid + " " + threadcount);
     if (properties == null) {
       throw new WorkloadException("Workload has not been initialized.");
     }
@@ -237,6 +254,10 @@ public class TimeseriesWorkload extends Workload {
     final HashMap<String, ByteIterator> cells = new HashMap<String, ByteIterator>();
     db.read(table, keyname, fields, cells);
     
+    if (dataintegrity) {
+      verifyRow(keyname, cells);
+    }
+    
     return true;
   }
   
@@ -265,8 +286,49 @@ public class TimeseriesWorkload extends Workload {
     return false;
   }
   
-  protected void verifyRow(String key, HashMap<String, ByteIterator> cells) {
-    
+  protected Status verifyRow(final String key, final HashMap<String, ByteIterator> cells) {
+    Status verifyStatus = Status.OK;
+    long startTime = System.nanoTime();
+
+    double value = 0;
+    long timestamp = 0;
+    final TreeMap<String, String> validationTags = new TreeMap<String, String>();
+    for (final Entry<String, ByteIterator> entry : cells.entrySet()) {
+      if (entry.getKey().equals(TIMESTAMP_KEY)) {
+        timestamp = Utils.bytesToLong(entry.getValue().toArray());
+      } else if (entry.getKey().equals(VALUE_KEY)) {
+        value = Utils.bytesToDouble(entry.getValue().toArray());
+      } else {
+        validationTags.put(entry.getKey(), entry.getValue().toString());
+      }
+    }
+
+    if (Math.abs(validationFunction(key, timestamp, validationTags) - value) > 1E7) {
+      verifyStatus = Status.UNEXPECTED_STATE;
+    }
+    long endTime = System.nanoTime();
+    _measurements.measure("VERIFY", (int) (endTime - startTime) / 1000);
+    _measurements.reportStatus("VERIFY", verifyStatus);
+    return verifyStatus;
+  }
+  
+  /**
+   * Function used for generating a deterministic hash based on the combination
+   * of metric, tags and timestamp.
+   * @param key A non-null string representing the key.
+   * @param timestamp A timestamp in the proper units for the workload.
+   * @param tags A non-null map of tag keys and values NOT including the YCSB
+   * key or timestamp.
+   * @return A hash value as an 8 byte integer.
+   */
+  protected long validationFunction(final String key, final long timestamp, 
+      final TreeMap<String, String> tags) {
+    final StringBuilder validationBuffer = new StringBuilder(keys[0].length() + 
+        (tagPairs * tagKeys[0].length()) + (tagPairs * tagValues[0].length));
+    for (final Entry<String, String> pair : tags.entrySet()) {
+      validationBuffer.append(pair.getKey()).append(pair.getValue());
+    }
+    return (long) validationBuffer.toString().hashCode() ^ timestamp;
   }
   
   /**
@@ -341,17 +403,30 @@ public class TimeseriesWorkload extends Workload {
         timestampGenerator.nextValue();
         rollover = false;
       }
-      
+      final TreeMap<String, String> validationTags;
+      if (dataintegrity) {
+        validationTags = new TreeMap<String, String>();
+      } else {
+        validationTags = null;
+      }
       final String key = keys[keyIdx];
       for (int i = 0; i < tagPairs; ++i) {
         int tvidx = tagValueIdxs[i];
         map.put(tagKeys[i], new StringByteIterator(tagValues[i][tvidx]));
+        if (dataintegrity) {
+          validationTags.put(tagKeys[i], tagValues[i][tvidx]);
+        }
       }
       
       map.put(TIMESTAMP_KEY, new ByteArrayByteIterator(
           Utils.longToBytes(timestampGenerator.currentValue())));
-      map.put(VALUE_KEY, new ByteArrayByteIterator(Utils.doubleToBytes(
-          Utils.random().nextDouble() * 100000)));
+      if (dataintegrity) {
+        map.put(VALUE_KEY, new NumericByteIterator(validationFunction(key, 
+            timestampGenerator.currentValue(), validationTags)));
+      } else {
+        map.put(VALUE_KEY, new NumericByteIterator(
+            Utils.random().nextDouble() * (double) 100000));
+      }
       
       boolean tagRollover = false;
       for (int i = tagCardinality.length - 1; i >= 0; --i) {

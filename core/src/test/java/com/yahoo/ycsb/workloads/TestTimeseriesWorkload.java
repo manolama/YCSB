@@ -12,18 +12,23 @@ import java.util.Map.Entry;
 
 import java.util.Properties;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.Vector;
 
+import com.yahoo.ycsb.ByteArrayByteIterator;
 import com.yahoo.ycsb.ByteIterator;
 import com.yahoo.ycsb.Client;
 import com.yahoo.ycsb.DB;
 import com.yahoo.ycsb.Status;
+import com.yahoo.ycsb.StringByteIterator;
 import com.yahoo.ycsb.Utils;
 import com.yahoo.ycsb.WorkloadException;
 import com.yahoo.ycsb.generator.UnixEpochTimestampGenerator;
+import com.yahoo.ycsb.measurements.Measurements;
 import com.yahoo.ycsb.workloads.TimeseriesWorkload.ThreadState;
 
 import org.testng.annotations.Test;
+import org.testng.collections.Maps;
 
 public class TestTimeseriesWorkload {
 
@@ -92,14 +97,13 @@ public class TestTimeseriesWorkload {
   public void badTimeUnit() throws Exception {
     final Properties p = new Properties();
     p.put(TimeseriesWorkload.TIMESTAMP_UNITS_PROPERTY, "foobar");
-    final TimeseriesWorkload wl = new TimeseriesWorkload();
-    wl.init(p);
+    final TimeseriesWorkload wl = getWorkload(p, true);
   }
   
   @Test (expectedExceptions = WorkloadException.class)
   public void failedToInitWorkloadBeforeThreadInit() throws Exception {
     final Properties p = getUTProperties();
-    final TimeseriesWorkload wl = new TimeseriesWorkload();
+    final TimeseriesWorkload wl = getWorkload(p, false);
     //wl.init(p); // <-- we NEED this :(
     final Object threadState = wl.initThread(p, 0, 2);
     
@@ -110,8 +114,7 @@ public class TestTimeseriesWorkload {
   @Test
   public void failedToInitThread() throws Exception {
     final Properties p = getUTProperties();
-    final TimeseriesWorkload wl = new TimeseriesWorkload();
-    wl.init(p);
+    final TimeseriesWorkload wl = getWorkload(p, true);
     
     final MockDB db = new MockDB();
     for (int i = 0; i < 74; i++) {
@@ -126,8 +129,7 @@ public class TestTimeseriesWorkload {
   public void insertOneKeyTwoTagsLowCardinality() throws Exception {
     final Properties p = getUTProperties();
     p.put(CoreWorkload.FIELD_COUNT_PROPERTY, "1");
-    final TimeseriesWorkload wl = new TimeseriesWorkload();
-    wl.init(p);
+    final TimeseriesWorkload wl = getWorkload(p, true);
     final Object threadState = wl.initThread(p, 0, 1);
     
     final MockDB db = new MockDB();
@@ -157,8 +159,7 @@ public class TestTimeseriesWorkload {
   public void insertTwoKeysTwoTagsLowCardinality() throws Exception {
     final Properties p = getUTProperties();
     
-    final TimeseriesWorkload wl = new TimeseriesWorkload();
-    wl.init(p);
+    final TimeseriesWorkload wl = getWorkload(p, true);
     final Object threadState = wl.initThread(p, 0, 1);
     
     final MockDB db = new MockDB();
@@ -196,8 +197,7 @@ public class TestTimeseriesWorkload {
   public void insertTwoKeysTwoThreads() throws Exception {
     final Properties p = getUTProperties();
     
-    final TimeseriesWorkload wl = new TimeseriesWorkload();
-    wl.init(p);
+    final TimeseriesWorkload wl = getWorkload(p, true);
     Object threadState = wl.initThread(p, 0, 2);
     
     MockDB db = new MockDB();
@@ -252,8 +252,7 @@ public class TestTimeseriesWorkload {
     final Properties p = getUTProperties();
     p.put(CoreWorkload.FIELD_COUNT_PROPERTY, "3");
     
-    final TimeseriesWorkload wl = new TimeseriesWorkload();
-    wl.init(p);
+    final TimeseriesWorkload wl = getWorkload(p, true);
     Object threadState = wl.initThread(p, 0, 2);
     
     MockDB db = new MockDB();
@@ -312,8 +311,7 @@ public class TestTimeseriesWorkload {
   public void read() throws Exception {
     final Properties p = getUTProperties();
     p.put(CoreWorkload.FIELD_COUNT_PROPERTY, "4");
-    final TimeseriesWorkload wl = new TimeseriesWorkload();
-    wl.init(p);
+    final TimeseriesWorkload wl = getWorkload(p, true);
     final Object threadState = wl.initThread(p, 0, 1);
     
     final MockDB db = new MockDB();
@@ -323,16 +321,46 @@ public class TestTimeseriesWorkload {
   }
   
   @Test
+  public void verifyRow() throws Exception {
+    final Properties p = getUTProperties();
+    final TimeseriesWorkload wl = getWorkload(p, true);
+    
+    final TreeMap<String, String> validationTags = new TreeMap<String, String>();
+    final HashMap<String, ByteIterator> cells = new HashMap<String, ByteIterator>();
+    
+    validationTags.put("AA", "AAAA");
+    cells.put("AA", new StringByteIterator("AAAA"));
+    validationTags.put("AB", "AAAB");
+    cells.put("AB", new StringByteIterator("AAAB"));
+    long hash = wl.validationFunction("AAAA", 1451606400L, validationTags);
+        
+    cells.put(TimeseriesWorkload.TIMESTAMP_KEY, new ByteArrayByteIterator(
+        Utils.longToBytes(1451606400L)));
+    cells.put(TimeseriesWorkload.VALUE_KEY, new ByteArrayByteIterator(
+        Utils.doubleToBytes(hash)));
+    
+    assertEquals(wl.verifyRow("AAAA", cells), Status.OK);
+    
+    // tweak the last value a bit
+    for (final ByteIterator it : cells.values()) {
+      it.reset();
+    }
+    cells.put(TimeseriesWorkload.VALUE_KEY, new ByteArrayByteIterator(
+        Utils.doubleToBytes((double) (hash - 1))));
+    assertEquals(wl.verifyRow("AAAA", cells), Status.UNEXPECTED_STATE);
+  }
+  
+  @Test
   public void threadState() throws Exception {
     final Properties p = getUTProperties();
     p.put(CoreWorkload.FIELD_COUNT_PROPERTY, "4");
-    final TimeseriesWorkload wl = new TimeseriesWorkload();
-    wl.init(p);
+    final TimeseriesWorkload wl = getWorkload(p, true);
     final ThreadState threadState = (ThreadState)wl.initThread(p, 0, 1);
     
     System.out.println(threadState.maxOffsets);
   }
   
+  /** Helper method that generates unit testing defaults for the properties map */
   private Properties getUTProperties() {
     final Properties p = new Properties();
     p.put(Client.RECORD_COUNT_PROPERTY, "10");
@@ -344,6 +372,19 @@ public class TestTimeseriesWorkload {
     p.put(TimeseriesWorkload.TAG_CARDINALITY_PROPERTY, "1,2");
     p.put(TimeseriesWorkload.TIMESTAMP_START_PROPERTY, "1451606400");
     return p;
+  }
+  
+  /** Helper to setup the workload for testing. */
+  private TimeseriesWorkload getWorkload(final Properties p, final boolean init) 
+      throws WorkloadException {
+    Measurements.setProperties(p);
+    if (!init) {
+      return new TimeseriesWorkload();
+    } else {
+      final TimeseriesWorkload workload = new TimeseriesWorkload();
+      workload.init(p);
+      return workload;
+    }
   }
   
   static class MockDB extends DB {

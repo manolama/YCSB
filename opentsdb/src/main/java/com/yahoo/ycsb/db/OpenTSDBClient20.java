@@ -12,6 +12,7 @@ import java.util.Vector;
 
 import com.yahoo.ycsb.ByteIterator;
 import com.yahoo.ycsb.DBException;
+import com.yahoo.ycsb.NumericByteIterator;
 import com.yahoo.ycsb.Status;
 import com.yahoo.ycsb.Utils;
 
@@ -40,7 +41,8 @@ public class OpenTSDBClient20 extends com.yahoo.ycsb.DB {
     try {
       synchronized (MUTEX) {
         if (tsdbClient == null) {
-          final Config config = new Config("/etc/opentsdb/opentsdb.conf");
+          this.getProperties().getProperty("opentsdbConfig");
+          final Config config = new Config("/etc/opentsdb/os_opentsdb.conf");
           tsdbClient = new TSDB(config);
         }
       }
@@ -61,10 +63,16 @@ public class OpenTSDBClient20 extends com.yahoo.ycsb.DB {
   @Override
   public Status insert(String table, String key,
       HashMap<String, ByteIterator> values) {
-    if (false) {
+    if (true) {
       System.out.println("Key: " + key);
       for (final Entry<String, ByteIterator> entry : values.entrySet()) {
-        System.out.println("  Field: " + entry.getKey() + "  Val: " + entry.getValue().toString());
+        if (entry.getKey().equals("YCSBV")) {
+          System.out.println("  Field: " + entry.getKey() + "  Val: " + ((NumericByteIterator)entry.getValue()).getDouble());
+        } else if (entry.getKey().equals("YCSBTS")) {
+          System.out.println("  Field: " + entry.getKey() + "  Val: " + ((NumericByteIterator)entry.getValue()).getLong());
+        } else {
+          //System.out.println("  Field: " + entry.getKey() + "  Val: " + entry.getValue().toString());
+        }
       }
       return Status.OK;
     } else {
