@@ -71,4 +71,8 @@ public class NumericByteIterator extends ByteIterator {
     }
     return Utils.bytesToDouble(payload);
   }
+
+  public boolean isFloatingPoint() {
+    return floatingPoint;
+  }
 }
