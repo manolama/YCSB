@@ -32,19 +32,19 @@ import org.testng.annotations.Test;
 import org.testng.collections.Maps;
 
 public class TestTimeseriesWorkload {
-
+  
   @Test
-  public void foobar() throws Exception {
+  public void twoThreads() throws Exception {
     final Properties p = getUTProperties();
+    Measurements.setProperties(p);
     
     final TimeseriesWorkload wl = new TimeseriesWorkload();
     wl.init(p);
     Object threadState = wl.initThread(p, 0, 2);
     
     MockDB db = new MockDB();
-    wl.doInsert(db, threadState);
     for (int i = 0; i < 74; i++) {
-      assertFalse(wl.doInsert(db, null));
+      assertTrue(wl.doInsert(db, threadState));
     }
     
     assertEquals(db.keys.size(), 74);
@@ -67,12 +67,14 @@ public class TestTimeseriesWorkload {
     threadState = wl.initThread(p, 1, 2);
     db = new MockDB();
     for (int i = 0; i < 74; i++) {
-      wl.doInsert(db, threadState);
+      assertTrue(wl.doInsert(db, threadState));
     }
     
+    assertEquals(db.keys.size(), 74);
+    assertEquals(db.values.size(), 74);
     timestamp = 1451606400;
-    int metricCtr = 0;
     for (int i = 0; i < db.keys.size(); i++) {
+      assertEquals(db.keys.get(i), "AAAB");
       assertEquals(db.values.get(i).get("AA").toString(), "AAAA");
       assertEquals(Utils.bytesToLong(db.values.get(i).get(
           TimeseriesWorkload.TIMESTAMP_KEY).toArray()), timestamp);
@@ -81,15 +83,7 @@ public class TestTimeseriesWorkload {
         assertEquals(db.values.get(i).get("AB").toString(), "AAAB");
       } else {
         assertEquals(db.values.get(i).get("AB").toString(), "AAAC");
-      }
-      if (metricCtr++ > 1) {
-        assertEquals(db.keys.get(i), "AAAC");
-        if (metricCtr >= 4) {
-          metricCtr = 0;
-          timestamp += 60;
-        }
-      } else {
-        assertEquals(db.keys.get(i), "AAAB");
+        timestamp += 60;
       }
     }
   }
@@ -360,7 +354,6 @@ public class TestTimeseriesWorkload {
   @Test
   public void read() throws Exception {
     final Properties p = getUTProperties();
-    p.put(CoreWorkload.FIELD_COUNT_PROPERTY, "4");
     final TimeseriesWorkload wl = getWorkload(p, true);
     final Object threadState = wl.initThread(p, 0, 1);
     
@@ -424,7 +417,7 @@ public class TestTimeseriesWorkload {
     p.put(TimeseriesWorkload.TAG_VALUE_LENGTH_PROPERTY, "4");
     p.put(TimeseriesWorkload.TAG_COUNT_PROPERTY, "2");
     p.put(TimeseriesWorkload.TAG_CARDINALITY_PROPERTY, "1,2");
-    p.put(TimeseriesWorkload.TIMESTAMP_START_PROPERTY, "1451606400");
+    p.put(CoreWorkload.INSERT_START_PROPERTY, "1451606400");
     return p;
   }
   
@@ -449,7 +442,7 @@ public class TestTimeseriesWorkload {
     @Override
     public Status read(String table, String key, Set<String> fields,
         HashMap<String, ByteIterator> result) {
-      System.out.println("Table; " + table + "  Key: + " + key + "  Fields: " + fields);
+      System.out.println("Table; " + table + "  Key: " + key + "  Fields: " + fields);
       return Status.OK;
     }
 

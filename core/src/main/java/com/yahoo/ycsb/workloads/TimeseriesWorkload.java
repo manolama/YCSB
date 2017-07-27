@@ -35,10 +35,7 @@ public class TimeseriesWorkload extends Workload {
       
   /** Name and default value for the timestamp units property. */   
   public static final String TIMESTAMP_UNITS_PROPERTY = "timestamp_units";    
-  public static final String TIMESTAMP_UNITS_PROPERTY_DEFAULT = "SECONDS";    
-      
-  /** Name for the optional starting timestamp property. */   
-  public static final String TIMESTAMP_START_PROPERTY = "start_timestamp";    
+  public static final String TIMESTAMP_UNITS_PROPERTY_DEFAULT = "SECONDS"; 
   
   public static final String TAG_COUNT_PROPERTY = "tag_count";
   public static final String TAG_COUNT_PROPERTY_DEFAULT = "4";
@@ -57,6 +54,25 @@ public class TimeseriesWorkload extends Workload {
   
   public static final String PAIR_DELIMITER_PROPERTY = "tag_pair_delimiter";
   public static final String PAIR_DELIMITER_PROPERTY_DEFAULT = "=";
+  
+  public static final String QUERY_TIMESPAN_PROPERTY = "query_timespan";
+  public static final String QUERY_TIMESPAN_PROPERTY_DEFAULT = "3600";
+  
+  public static final String QUERY_TIMESPAN_DELIMITER_PROPERTY = "query_timespan_delimiter";
+  public static final String QUERY_TIMESPAN_DELIMITER_PROPERTY_DEFAULT = ",";
+  
+  public static final String GROUPBY_KEY_PROPERTY = "group_by_key";
+  public static final String GROUPBY_KEY_PROPERTY_DEFAULT = "YCSBGB";
+  
+  public static final String GROUPBY_PROPERTY = "group_by_function";
+  
+  public static final String GROUPBY_KEYS_PROPERTY = "group_by_keys";
+  
+  public static final String DOWNSAMPLING_KEY_PROPERTY = "downsampling_key";
+  public static final String DOWNSAMPLING_KEY_PROPERTY_DEFAULT = "YCSBDS";
+  
+  public static final String DOWNSAMPLING_PROPERTY = "downsampling_function";
+  
   
   private Properties properties;
   
@@ -79,7 +95,17 @@ public class TimeseriesWorkload extends Workload {
   private String[][] tagValues;
   private int firstIncrementableCardinality;
   
+  // Query parameters
+  private int queryTimeSpan;
   private String tagPairDelimiter;
+  private String queryTimeSpanDelimiter;
+  private boolean groupBy;
+  private String groupByKey;
+  private String groupByFunction;
+  private boolean[] groupBys;
+  private boolean downsample;
+  private String downsampleKey;
+  private String downsampleFunction;
 
   /**
    * Set to true if want to check correctness of reads. Must also
@@ -98,6 +124,7 @@ public class TimeseriesWorkload extends Workload {
     if (recordcount == 0) {
       recordcount = Integer.MAX_VALUE;
     }
+    
     // setup the key, tag key and tag value generators
     final int keyLength = Integer.parseInt(p.getProperty(KEY_LENGTH_PROPERTY, 
         KEY_LENGTH_PROPERTY_DEFAULT));
@@ -111,6 +138,9 @@ public class TimeseriesWorkload extends Workload {
     tagValueGenerator = new IncrementingPrintableStringGenerator(tagValueLength);
     
     // setup the cardinality
+    int threads = Integer.parseInt(p.getProperty(Client.THREAD_COUNT_PROPERTY, "1"));
+    numKeys = Integer.parseInt(p.getProperty(CoreWorkload.FIELD_COUNT_PROPERTY, 
+        CoreWorkload.FIELD_COUNT_PROPERTY_DEFAULT));
     tagPairs = Integer.parseInt(p.getProperty(TAG_COUNT_PROPERTY, 
         TAG_COUNT_PROPERTY_DEFAULT));
     tagCardinality = new int[tagPairs];
@@ -118,6 +148,7 @@ public class TimeseriesWorkload extends Workload {
         TAG_CARDINALITY_PROPERTY_DEFAULT);
     final String[] tagCardinalityParts = tagCardinalityString.split(",");
     int idx = 0;
+    long totalCardinality = numKeys;
     for (final String cardinality : tagCardinalityParts) {
       try {
         tagCardinality[idx] = Integer.parseInt(cardinality.trim());
@@ -129,12 +160,19 @@ public class TimeseriesWorkload extends Workload {
         throw new WorkloadException("Cardinality must be greater than zero: " + 
             tagCardinality[idx]);
       }
+      totalCardinality *= tagCardinality[idx];
       ++idx;
       if (idx >= tagPairs) {
         // we have more cardinalities than tag keys so bail at this point.
         break;
       }
     }
+    if (numKeys < threads) {
+      throw new WorkloadException("Field count " + numKeys + " (keys for time "
+          + "series workloads) must be greater or equal to the number of "
+          + "threads " + threads);
+    }
+    
     // fill tags without explicit cardinality with 1
     if (idx < tagPairs) {
       tagCardinality[idx++] = 1;
@@ -147,8 +185,6 @@ public class TimeseriesWorkload extends Workload {
       }
     }
     
-    numKeys = Integer.parseInt(p.getProperty(CoreWorkload.FIELD_COUNT_PROPERTY, 
-        CoreWorkload.FIELD_COUNT_PROPERTY_DEFAULT));
     keys = new String[numKeys];
     for (int i = 0; i < numKeys; ++i) {
       keys[i] = keyGenerator.nextString();
@@ -192,11 +228,33 @@ public class TimeseriesWorkload extends Workload {
     dataintegrity = Boolean.parseBoolean(
         p.getProperty(CoreWorkload.DATA_INTEGRITY_PROPERTY, 
             CoreWorkload.DATA_INTEGRITY_PROPERTY_DEFAULT));
+    
+    queryTimeSpan = Integer.parseInt(p.getProperty(QUERY_TIMESPAN_PROPERTY, 
+        QUERY_TIMESPAN_PROPERTY_DEFAULT));
+    queryTimeSpanDelimiter = p.getProperty(QUERY_TIMESPAN_DELIMITER_PROPERTY, 
+        QUERY_TIMESPAN_DELIMITER_PROPERTY_DEFAULT);
+    
+    groupByFunction = p.getProperty(GROUPBY_PROPERTY);
+    if (groupByFunction != null && !groupByFunction.isEmpty()) {
+      final String groupByKeys = p.getProperty(GROUPBY_KEYS_PROPERTY);
+      if (groupByKeys == null || groupByKeys.isEmpty()) {
+        throw new WorkloadException("Group by was enabled but no keys were specified.");
+      }
+      final String[] gbKeys = groupByKeys.split(",");
+      if (gbKeys.length != tagKeys.length) {
+        throw new WorkloadException("Only " + gbKeys.length + " group by keys "
+            + "were specified but there were " + tagKeys.length + " tag keys given.");
+      }
+      groupBys = new boolean[gbKeys.length];
+      for (int i = 0; i < gbKeys.length; i++) {
+        groupBys[i] = Integer.parseInt(gbKeys[i].trim()) == 0 ? false : true;
+      }
+      groupBy = true;
+    }
   }
   
   @Override
   public Object initThread(Properties p, int mythreadid, int threadcount) throws WorkloadException {
-    System.out.println("INITALIZING: " + mythreadid + " " + threadcount);
     if (properties == null) {
       throw new WorkloadException("Workload has not been initialized.");
     }
@@ -247,9 +305,19 @@ public class TimeseriesWorkload extends Workload {
     // rando tags
     HashSet<String> fields = new HashSet<String>();
     for (int i = 0; i < tagPairs; ++i) {
-      fields.add(tagKeys[i] + tagPairDelimiter + tagValues[i][Utils.random().nextInt(tagValues[i].length)]);
+      if (groupBy && groupBys[i]) {
+        fields.add(tagKeys[i]);
+      } else {
+        fields.add(tagKeys[i] + tagPairDelimiter + tagValues[i][Utils.random().nextInt(tagValues[i].length)]);
+      }
     }
-    fields.add(TIMESTAMP_KEY + tagPairDelimiter + timestamp);
+    fields.add(TIMESTAMP_KEY + tagPairDelimiter + timestamp + queryTimeSpanDelimiter + (timestamp + queryTimeSpan));
+    if (groupBy) {
+      fields.add(groupByKey + tagPairDelimiter + groupByFunction);
+    }
+    if (downsample) {
+      fields.add(downsampleKey + tagPairDelimiter + downsampleFunction);
+    }
     
     final HashMap<String, ByteIterator> cells = new HashMap<String, ByteIterator>();
     db.read(table, keyname, fields, cells);
@@ -372,7 +440,7 @@ public class TimeseriesWorkload extends Workload {
       tagValueIdxs = new int[tagPairs]; // all zeros
       
       final String startingTimestamp = 
-          properties.getProperty(TIMESTAMP_START_PROPERTY);
+          properties.getProperty(CoreWorkload.INSERT_START_PROPERTY);
       if (startingTimestamp == null || startingTimestamp.isEmpty()) {
         timestampGenerator = new UnixEpochTimestampGenerator(timestampInterval, timeUnits);
       } else {
@@ -381,7 +449,7 @@ public class TimeseriesWorkload extends Workload {
               Long.parseLong(startingTimestamp));
         } catch (NumberFormatException nfe) {
           throw new WorkloadException("Unable to parse the " + 
-              TIMESTAMP_START_PROPERTY, nfe);
+              CoreWorkload.INSERT_START_PROPERTY, nfe);
         }
       }
       // Set the last value properly for the timestamp, otherwise it may start 
