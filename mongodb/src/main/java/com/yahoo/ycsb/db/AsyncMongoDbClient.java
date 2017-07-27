@@ -546,5 +546,11 @@ public class AsyncMongoDbClient extends DB {
 
       return value;
     }
+
+    
+    @Override
+    public void reset() {
+      // TODO Auto-generated method stub
+    }
   }
 }

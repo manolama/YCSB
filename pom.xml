@@ -72,6 +72,7 @@ LICENSE file.
     <hbase094.version>0.94.27</hbase094.version>
     <hbase098.version>0.98.14-hadoop2</hbase098.version>
     <hbase10.version>1.0.2</hbase10.version>
+    <hbase12.version>1.2.5</hbase12.version>
     <accumulo.version>1.6.0</accumulo.version>
     <cassandra.cql.version>3.0.0</cassandra.cql.version>
     <geode.version>1.0.0-incubating.M3</geode.version>
@@ -97,10 +98,12 @@ LICENSE file.
     <tarantool.version>1.6.5</tarantool.version>
     <riak.version>2.0.5</riak.version>
     <aerospike.version>3.1.2</aerospike.version>
-    <solr.version>5.4.0</solr.version>
-    <solr6.version>6.2.1</solr6.version>
+    <solr.version>5.5.3</solr.version>
+    <solr6.version>6.4.1</solr6.version>
     <arangodb.version>2.7.3</arangodb.version>
+    <arangodb3.version>4.1.7</arangodb3.version>
     <azurestorage.version>4.0.0</azurestorage.version>
+    <cloudspanner.version>0.9.3-beta</cloudspanner.version>
   </properties>
 
   <modules>
@@ -111,9 +114,11 @@ LICENSE file.
     <module>accumulo</module>
     <module>aerospike</module>
     <module>arangodb</module>
+    <module>arangodb3</module>
     <module>asynchbase</module>
     <module>azuretablestorage</module>
     <module>cassandra</module>
+    <module>cloudspanner</module>
     <module>couchbase</module>
     <module>couchbase2</module>
     <module>distribution</module>
@@ -126,6 +131,7 @@ LICENSE file.
     <module>hbase094</module>
     <module>hbase098</module>
     <module>hbase10</module>
+    <module>hbase12</module>
     <module>hypertable</module>
     <module>infinispan</module>
     <module>jdbc</module>
