@@ -15,6 +15,7 @@ import com.yahoo.ycsb.DBException;
 import com.yahoo.ycsb.NumericByteIterator;
 import com.yahoo.ycsb.Status;
 import com.yahoo.ycsb.Utils;
+import com.yahoo.ycsb.workloads.TimeseriesWorkload;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -63,14 +64,15 @@ public class OpenTSDBClient20 extends com.yahoo.ycsb.DB {
   @Override
   public Status insert(String table, String key,
       HashMap<String, ByteIterator> values) {
-    if (true) {
+    if (false) {
       System.out.println("Key: " + key);
       for (final Entry<String, ByteIterator> entry : values.entrySet()) {
         
-        if (entry.getKey().equals("YCSBV")) {
+        if (entry.getKey().equals(TimeseriesWorkload.VALUE_KEY)) {
           final NumericByteIterator it = (NumericByteIterator) entry.getValue();
-          System.out.println("  Field: " + entry.getKey() + "  Val: " + it.getLong());
-        } else if (entry.getKey().equals("YCSBTS")) {
+          System.out.println("  Field: " + entry.getKey() + "  Val: " + 
+          (it.isFloatingPoint() ? it.getDouble() : it.getLong()));
+        } else if (entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
           final NumericByteIterator it = (NumericByteIterator) entry.getValue();
           System.out.println("  Field: " + entry.getKey() + "  Val: " + it.getLong());
         } else {
@@ -82,9 +84,10 @@ public class OpenTSDBClient20 extends com.yahoo.ycsb.DB {
       final Map<String, String> tags = new HashMap<String, String>(values.size());
       int count = 0;
       for (final Entry<String, ByteIterator> entry : values.entrySet()) {
-        if (entry.getKey().equals("YCSBV")) {
-          value = Utils.bytesToDouble(entry.getValue().toArray());
-        } else if (entry.getKey().equals("YCSBTS")) {
+        if (entry.getKey().equals(TimeseriesWorkload.VALUE_KEY)) {
+          final NumericByteIterator it = (NumericByteIterator) entry.getValue();
+          value = it.isFloatingPoint() ? it.getDouble() : (double) it.getLong();
+        } else if (entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
           timestamp = Utils.bytesToLong(entry.getValue().toArray());
         } else {
           tags.put(entry.getKey(), new String(entry.getValue().toString()));

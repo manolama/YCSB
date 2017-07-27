@@ -420,18 +420,20 @@ public class TimeseriesWorkload extends Workload {
     int maxOffsets;
     
     ThreadState(final int threadID, final int threadCount) throws WorkloadException {
-      if (threadID >= threadCount) {
+      int totalThreads = threadCount > 0 ? threadCount : 1;
+      
+      if (threadID >= totalThreads) {
         throw new IllegalStateException("Thread ID " + threadID + " cannot be greater "
-            + "than or equal than the thread count " + threadCount);
+            + "than or equal than the thread count " + totalThreads);
       }
       if (keys.length < threadCount) {
-        throw new WorkloadException("Thread count " + threadCount + " must be greater "
+        throw new WorkloadException("Thread count " + totalThreads + " must be greater "
             + "than or equal to key count " + keys.length);
       }
       
-      int keysPerThread = keys.length / threadCount;
+      int keysPerThread = keys.length / totalThreads;
       keyIdx = keyIdxStart = keysPerThread * threadID;
-      if (threadCount - 1 == threadID) {
+      if (totalThreads - 1 == threadID) {
         keyIdxEnd = keys.length;
       } else {
         keyIdxEnd = keyIdxStart + keysPerThread;
@@ -457,7 +459,7 @@ public class TimeseriesWorkload extends Workload {
       timestampGenerator.nextValue();
       startTimestamp = timestampGenerator.lastValue();
       interval = timestampGenerator.getOffset(1);
-      threadOps = recordcount / threadCount;
+      threadOps = recordcount / totalThreads;
       
       long recordsPerTimestamp = (keyIdxEnd - keyIdxStart);
       for (final int cardinality : tagCardinality) {
