@@ -34,15 +34,15 @@ public class BasicDB extends DB {
   public static final String RANDOMIZE_DELAY = "basicdb.randomizedelay";
   public static final String RANDOMIZE_DELAY_DEFAULT = "true";
 
-  private boolean verbose;
-  private boolean randomizedelay;
-  private int todelay;
+  protected boolean verbose;
+  protected boolean randomizedelay;
+  protected int todelay;
 
   public BasicDB() {
     todelay = 0;
   }
 
-  private void delay() {
+  protected void delay() {
     if (todelay > 0) {
       long delayNs;
       if (randomizedelay) {
