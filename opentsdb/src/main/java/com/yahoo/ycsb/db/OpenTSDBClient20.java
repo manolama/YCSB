@@ -164,7 +164,12 @@ public class OpenTSDBClient20 extends com.yahoo.ycsb.DB {
         wdps.setBatchImport(false);
         wdps.setBufferingTime((short)0);
         wdps.setSeries(key, tags);
-        wdps.addPoint(System.currentTimeMillis(), 1).join(50000);
+        if (isFloat) {
+          wdps.addPoint(System.currentTimeMillis(), (float) doubleVal).join(500);  
+        } else {
+          wdps.addPoint(System.currentTimeMillis(), longVal).join(500);
+        }
+        
         return Status.OK;
       } catch (Exception e) {
         LOG.error("WTF?", e);
