@@ -5,7 +5,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map.Entry;
 import java.util.Properties;
+import java.util.Random;
 import java.util.TreeMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 import com.yahoo.ycsb.ByteArrayByteIterator;
@@ -21,6 +23,7 @@ import com.yahoo.ycsb.WorkloadException;
 import com.yahoo.ycsb.generator.DiscreteGenerator;
 import com.yahoo.ycsb.generator.Generator;
 import com.yahoo.ycsb.generator.IncrementingPrintableStringGenerator;
+import com.yahoo.ycsb.generator.RandomDiscreteTimestampGenerator;
 import com.yahoo.ycsb.generator.UnixEpochTimestampGenerator;
 import com.yahoo.ycsb.measurements.Measurements;
 
@@ -55,6 +58,13 @@ public class TimeseriesWorkload extends Workload {
   public static final String PAIR_DELIMITER_PROPERTY = "tag_pair_delimiter";
   public static final String PAIR_DELIMITER_PROPERTY_DEFAULT = "=";
   
+  public static final String RANDOMIZE_TIMESTAMP_ORDER_PROPERTY = "randomize_timestamp_order";
+  public static final String RANDOMIZE_TIMESTAMP_ORDER_PROPERTY_DEFAULT = "false";
+  
+  public static final String RANDOMIZE_TIMESERIES_ORDER_PROPERTY = "randomize_timeseries_order";
+  public static final String RANDOMIZE_TIMESERIES_ORDER_PROPERTY_DEFAULT = "true";
+  
+  // Query params
   public static final String QUERY_TIMESPAN_PROPERTY = "query_timespan";
   public static final String QUERY_TIMESPAN_PROPERTY_DEFAULT = "3600";
   
@@ -73,7 +83,6 @@ public class TimeseriesWorkload extends Workload {
   
   public static final String DOWNSAMPLING_PROPERTY = "downsampling_function";
   
-  
   private Properties properties;
   
   private Generator<String> keyGenerator;
@@ -82,6 +91,9 @@ public class TimeseriesWorkload extends Workload {
   
   private int timestampInterval;
   private TimeUnit timeUnits;
+  private boolean randomizeTimestampOrder;
+  private boolean randomizeTimeseriesOrder;
+  private int totalCardinality;
   
   private int recordcount;
   private int tagPairs;
@@ -125,6 +137,13 @@ public class TimeseriesWorkload extends Workload {
       recordcount = Integer.MAX_VALUE;
     }
     
+    randomizeTimestampOrder = Boolean.parseBoolean(p.getProperty(
+        RANDOMIZE_TIMESTAMP_ORDER_PROPERTY, 
+        RANDOMIZE_TIMESTAMP_ORDER_PROPERTY_DEFAULT));
+    randomizeTimeseriesOrder = Boolean.parseBoolean(p.getProperty(
+        RANDOMIZE_TIMESERIES_ORDER_PROPERTY, 
+        RANDOMIZE_TIMESERIES_ORDER_PROPERTY_DEFAULT));
+    
     // setup the key, tag key and tag value generators
     final int keyLength = Integer.parseInt(p.getProperty(KEY_LENGTH_PROPERTY, 
         KEY_LENGTH_PROPERTY_DEFAULT));
@@ -148,7 +167,7 @@ public class TimeseriesWorkload extends Workload {
         TAG_CARDINALITY_PROPERTY_DEFAULT);
     final String[] tagCardinalityParts = tagCardinalityString.split(",");
     int idx = 0;
-    long totalCardinality = numKeys;
+    totalCardinality = numKeys;
     for (final String cardinality : tagCardinalityParts) {
       try {
         tagCardinality[idx] = Integer.parseInt(cardinality.trim());
@@ -189,6 +208,9 @@ public class TimeseriesWorkload extends Workload {
     for (int i = 0; i < numKeys; ++i) {
       keys[i] = keyGenerator.nextString();
     }
+    if (randomizeTimeseriesOrder) {
+      Utils.shuffleArray(keys);
+    }
     
     tagKeys = new String[tagPairs];
     tagValues = new String[tagPairs][];
@@ -200,6 +222,11 @@ public class TimeseriesWorkload extends Workload {
       tagValues[i] = new String[cardinality];
       for (int x = 0; x < cardinality; ++x) {
         tagValues[i][x] = tagValueGenerator.nextString();
+      }
+    }
+    if (randomizeTimeseriesOrder) {
+      for (int i = 0; i < tagValues.length; i++) {
+        Utils.shuffleArray(tagValues[i]);
       }
     }
     
@@ -311,6 +338,8 @@ public class TimeseriesWorkload extends Workload {
         fields.add(tagKeys[i] + tagPairDelimiter + tagValues[i][Utils.random().nextInt(tagValues[i].length)]);
       }
     }
+    // TODO - only query up to the time that data has been written and randomly pick
+    // the timestamps to query.
     fields.add(TIMESTAMP_KEY + tagPairDelimiter + timestamp + queryTimeSpanDelimiter + (timestamp + queryTimeSpan));
     if (groupBy) {
       fields.add(groupByKey + tagPairDelimiter + groupByFunction);
@@ -419,7 +448,7 @@ public class TimeseriesWorkload extends Workload {
     final long threadOps;
     int maxOffsets;
     
-    ThreadState(final int threadID, final int threadCount) throws WorkloadException {
+    protected ThreadState(final int threadID, final int threadCount) throws WorkloadException {
       int totalThreads = threadCount > 0 ? threadCount : 1;
       
       if (threadID >= totalThreads) {
@@ -441,14 +470,22 @@ public class TimeseriesWorkload extends Workload {
       
       tagValueIdxs = new int[tagPairs]; // all zeros
       
+      int intervals = 0;
+      if (randomizeTimestampOrder) {
+        intervals = (recordcount / (threadCount * keysPerThread * totalCardinality)) + 1;
+      }
+      
       final String startingTimestamp = 
           properties.getProperty(CoreWorkload.INSERT_START_PROPERTY);
       if (startingTimestamp == null || startingTimestamp.isEmpty()) {
-        timestampGenerator = new UnixEpochTimestampGenerator(timestampInterval, timeUnits);
+        timestampGenerator = randomizeTimestampOrder ? 
+            new UnixEpochTimestampGenerator(timestampInterval, timeUnits) :
+            new RandomDiscreteTimestampGenerator(timestampInterval, timeUnits, intervals);
       } else {
         try {
-          timestampGenerator = new UnixEpochTimestampGenerator(timestampInterval, timeUnits, 
-              Long.parseLong(startingTimestamp));
+          timestampGenerator = randomizeTimestampOrder ? 
+              new UnixEpochTimestampGenerator(timestampInterval, timeUnits, Long.parseLong(startingTimestamp)) :
+                new RandomDiscreteTimestampGenerator(timestampInterval, timeUnits, Long.parseLong(startingTimestamp), intervals);
         } catch (NumberFormatException nfe) {
           throw new WorkloadException("Unable to parse the " + 
               CoreWorkload.INSERT_START_PROPERTY, nfe);
@@ -529,4 +566,5 @@ public class TimeseriesWorkload extends Workload {
       return key;
     }
   }
+
 }

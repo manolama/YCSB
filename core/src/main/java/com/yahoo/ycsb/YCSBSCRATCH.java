@@ -3,6 +3,7 @@ import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import javax.management.InstanceNotFoundException;
 import javax.management.MBeanServerNotification;
@@ -17,6 +18,7 @@ import com.yahoo.ycsb.generator.DiscreteGenerator;
 import com.yahoo.ycsb.generator.ExponentialGenerator;
 import com.yahoo.ycsb.generator.HotspotIntegerGenerator;
 import com.yahoo.ycsb.generator.IncrementingPrintableStringGenerator;
+import com.yahoo.ycsb.generator.RandomDiscreteTimestampGenerator;
 import com.yahoo.ycsb.generator.RandomPrintableStringGenerator;
 import com.yahoo.ycsb.generator.ScrambledZipfianGenerator;
 import com.yahoo.ycsb.generator.UniformGenerator;
@@ -25,7 +27,8 @@ import com.yahoo.ycsb.generator.UniformIntegerGenerator;
 public class YCSBSCRATCH {
 
   public static void main(String[] args) {
-    beano();
+    randoTimestamps();
+    //beano();
     //randomPrintableStringGenerator();
     //stringByteIterator();
     //uniformGenerator();
@@ -183,5 +186,15 @@ public class YCSBSCRATCH {
     for (int i = 0; i < 4; i++) {
       System.out.println(gen.nextString());
     }
+  }
+
+  static void randoTimestamps() {
+    RandomDiscreteTimestampGenerator gen = 
+        new RandomDiscreteTimestampGenerator(60, TimeUnit.SECONDS, 1483272000, 60);
+    
+    for (int i = 0; i < 60; i++) {
+      System.out.println(gen.nextValue());
+    }
+    
   }
 }
