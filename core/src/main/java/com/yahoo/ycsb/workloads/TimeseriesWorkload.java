@@ -31,7 +31,7 @@ public class TimeseriesWorkload extends Workload {
   
   public enum ValueType {
     INTEGERS("integers"),
-    FLOATING("floating"),
+    FLOATS("floats"),
     MIXED("mixed");
     
     private final String name;
@@ -564,7 +564,7 @@ public class TimeseriesWorkload extends Workload {
         case INTEGERS:
           map.put(VALUE_KEY, new NumericByteIterator(Utils.random().nextInt()));
           break;
-        case FLOATING:
+        case FLOATS:
           map.put(VALUE_KEY, new NumericByteIterator(
               Utils.random().nextDouble() * (double) 100000));
         case MIXED:

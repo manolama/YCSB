@@ -365,10 +365,12 @@ public class InfluxDBClient extends com.yahoo.ycsb.DB {
     switch (timeUnits) {
     case NANOSECONDS:
       return timestamp;
-    case MILLISECONDS:
+    case MICROSECONDS:
       return timestamp * 1000;
-    case SECONDS:
+    case MILLISECONDS:
       return timestamp * 1000 * 1000;
+    case SECONDS:
+      return timestamp * 1000 * 1000 * 1000;
     default:
       throw new IllegalArgumentException("Not supporting units: " + timeUnits);
     }
@@ -377,6 +379,8 @@ public class InfluxDBClient extends com.yahoo.ycsb.DB {
   public long timestampToMillis(final long timestamp) {
     switch (timeUnits) {
     case NANOSECONDS:
+      return timestamp / 1000 / 1000;
+    case MICROSECONDS:
       return timestamp / 1000;
     case MILLISECONDS:
       return timestamp;
