@@ -29,6 +29,27 @@ import com.yahoo.ycsb.measurements.Measurements;
 
 public class TimeseriesWorkload extends Workload {  
   
+  public enum ValueType {
+    INTEGERS("integers"),
+    FLOATING("floating"),
+    MIXED("mixed");
+    
+    private final String name;
+    
+    ValueType(final String name) {
+      this.name = name;
+    }
+    
+    public static ValueType fromString(final String name) {
+      for (final ValueType type : ValueType.values()) {
+        if (type.name.equalsIgnoreCase(name)) {
+          return type;
+        }
+      }
+      throw new IllegalArgumentException("Unrecognized type: " + name);
+    }
+  }
+  
   public static final String TIMESTAMP_KEY = "YCSBTS";
   public static final String VALUE_KEY = "YCSBV";
   
@@ -64,6 +85,9 @@ public class TimeseriesWorkload extends Workload {
   public static final String RANDOMIZE_TIMESERIES_ORDER_PROPERTY = "randomize_timeseries_order";
   public static final String RANDOMIZE_TIMESERIES_ORDER_PROPERTY_DEFAULT = "true";
   
+  public static final String VALUE_TYPE_PROPERTY = "value_type";
+  public static final String VALUE_TYPE_PROPERTY_DEFAULT = "floating";
+  
   // Query params
   public static final String QUERY_TIMESPAN_PROPERTY = "query_timespan";
   public static final String QUERY_TIMESPAN_PROPERTY_DEFAULT = "3600";
@@ -93,6 +117,7 @@ public class TimeseriesWorkload extends Workload {
   private TimeUnit timeUnits;
   private boolean randomizeTimestampOrder;
   private boolean randomizeTimeseriesOrder;
+  private ValueType valueType;
   private int totalCardinality;
   
   private int recordcount;
@@ -278,6 +303,8 @@ public class TimeseriesWorkload extends Workload {
       }
       groupBy = true;
     }
+    
+    valueType = ValueType.fromString(p.getProperty(VALUE_TYPE_PROPERTY, VALUE_TYPE_PROPERTY_DEFAULT));
   }
   
   @Override
@@ -479,13 +506,13 @@ public class TimeseriesWorkload extends Workload {
           properties.getProperty(CoreWorkload.INSERT_START_PROPERTY);
       if (startingTimestamp == null || startingTimestamp.isEmpty()) {
         timestampGenerator = randomizeTimestampOrder ? 
-            new UnixEpochTimestampGenerator(timestampInterval, timeUnits) :
-            new RandomDiscreteTimestampGenerator(timestampInterval, timeUnits, intervals);
+            new RandomDiscreteTimestampGenerator(timestampInterval, timeUnits, intervals) :
+            new UnixEpochTimestampGenerator(timestampInterval, timeUnits);
       } else {
         try {
           timestampGenerator = randomizeTimestampOrder ? 
-              new UnixEpochTimestampGenerator(timestampInterval, timeUnits, Long.parseLong(startingTimestamp)) :
-                new RandomDiscreteTimestampGenerator(timestampInterval, timeUnits, Long.parseLong(startingTimestamp), intervals);
+              new RandomDiscreteTimestampGenerator(timestampInterval, timeUnits, Long.parseLong(startingTimestamp), intervals) :
+              new UnixEpochTimestampGenerator(timestampInterval, timeUnits, Long.parseLong(startingTimestamp));
         } catch (NumberFormatException nfe) {
           throw new WorkloadException("Unable to parse the " + 
               CoreWorkload.INSERT_START_PROPERTY, nfe);
@@ -529,11 +556,28 @@ public class TimeseriesWorkload extends Workload {
       
       map.put(TIMESTAMP_KEY, new NumericByteIterator(timestampGenerator.currentValue()));
       if (dataintegrity) {
+        // TODO - value should be hash of keys
         map.put(VALUE_KEY, new NumericByteIterator(validationFunction(key, 
             timestampGenerator.currentValue(), validationTags)));
       } else {
-        map.put(VALUE_KEY, new NumericByteIterator(
-            Utils.random().nextDouble() * (double) 100000));
+        switch (valueType) {
+        case INTEGERS:
+          map.put(VALUE_KEY, new NumericByteIterator(Utils.random().nextInt()));
+          break;
+        case FLOATING:
+          map.put(VALUE_KEY, new NumericByteIterator(
+              Utils.random().nextDouble() * (double) 100000));
+        case MIXED:
+          if (Utils.random().nextBoolean()) {
+            map.put(VALUE_KEY, new NumericByteIterator(Utils.random().nextInt()));
+          } else {
+            map.put(VALUE_KEY, new NumericByteIterator(
+                Utils.random().nextDouble() * (double) 100000));
+          }
+          break;
+        default:
+          throw new IllegalStateException("Somehow we didn't have a value type configured that we support: " + valueType);
+        }        
       }
       
       boolean tagRollover = false;

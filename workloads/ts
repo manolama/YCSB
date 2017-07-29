@@ -3,4 +3,4 @@ recordcount=10000
 operationcount=10000
 workload=com.yahoo.ycsb.workloads.TimeseriesWorkload
 
-readproportion=0.25
+#readproportion=0.75
