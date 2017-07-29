@@ -81,6 +81,7 @@ public class OpenTSDBClient20 extends com.yahoo.ycsb.DB {
   public static final String ASYNC_PROPERTY_DEFAULT = "false";
   
   public static final String TSDB_HOST_PROPERTY = "opentsdb.host";
+  public static final String TSDB_HOST_PROPERTY_DEFAULT = "http://localhost:4242";
   
   private static final Object MUTEX = new Object();
   private static int COUNTER = 0;
@@ -103,7 +104,7 @@ public class OpenTSDBClient20 extends com.yahoo.ycsb.DB {
     Logger root = (Logger)LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
     root.setLevel(Level.INFO);
     
-    host = getProperties().getProperty(TSDB_HOST_PROPERTY);
+    host = getProperties().getProperty(TSDB_HOST_PROPERTY, TSDB_HOST_PROPERTY_DEFAULT);
     clientType = ClientType.fromString(getProperties().getProperty(
         CLIENT_TYPE_PROPERTY, 
         CLIENT_TYPE_PROPERTY_DEFAULT));
@@ -341,7 +342,8 @@ public class OpenTSDBClient20 extends com.yahoo.ycsb.DB {
       }
       
     case HTTP:
-      final HttpPost request = new HttpPost(host + "/api/query");
+      final HttpPost request = new HttpPost(host + "/api/query"
+          + (!async ? "?sync" : ""));
       request.setHeader("Content-Type", "application/json");
       request.setEntity(new ByteArrayEntity(JSON.serializeToBytes(query)));
       try {

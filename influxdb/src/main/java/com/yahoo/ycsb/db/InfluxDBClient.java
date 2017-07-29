@@ -1,6 +1,8 @@
 package com.yahoo.ycsb.db;
 
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Set;
 import java.util.Vector;
@@ -89,6 +91,7 @@ public class InfluxDBClient extends com.yahoo.ycsb.DB {
   private String queryTimeSpanDelimiter;
   private String groupByKey;
   private String downsampleKey;
+  private SimpleDateFormat dateFormat;
   
   @Override
   public void init() throws DBException {
@@ -112,6 +115,7 @@ public class InfluxDBClient extends com.yahoo.ycsb.DB {
       throw new IllegalArgumentException("YCSB doesn't support " + timeUnits + 
           " at this time.");
     }
+    dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
     
     switch (clientType) {
     case NATIVE:
@@ -200,15 +204,17 @@ public class InfluxDBClient extends com.yahoo.ycsb.DB {
         final String[] pair = field.split(tagPairDelimiter);
         if (pair[0].equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
           final String[] range = pair[1].split(queryTimeSpanDelimiter);
+          
           if (range.length == 1) {
-            query.append(" time == '")
-                 .append(timestampToNano(Long.parseLong(range[0])))
+            
+            query.append(" time = '")
+                 .append(dateFormat.format(new Date(timestampToMillis(Long.parseLong(range[0])))))
                  .append("'");
           } else {
             query.append(" time >= '")
-                 .append(timestampToNano(Long.parseLong(range[0])))
+                 .append(dateFormat.format(new Date(timestampToMillis(Long.parseLong(range[0])))))
                  .append("' AND time <= '")
-                 .append(timestampToNano(Long.parseLong(range[1])))
+                 .append(dateFormat.format(new Date(timestampToMillis(Long.parseLong(range[1])))))
                  .append("'");
           }
         } else if (pair[0].equals(groupByKey)) {
@@ -218,9 +224,9 @@ public class InfluxDBClient extends com.yahoo.ycsb.DB {
         } else {
           if (pair.length == 2) {
             // literal match
-            query.append("'")
+            query.append(" \"")
                  .append(pair[0])
-                 .append("' = '")
+                 .append("\" = '")
                  .append(pair[1])
                  .append("'");
           } else {
@@ -228,6 +234,7 @@ public class InfluxDBClient extends com.yahoo.ycsb.DB {
           }
         }
       }
+      System.out.println(query.toString());
       
       final HttpUrl url = new HttpUrl.Builder()
         .scheme(protocol)
@@ -334,6 +341,7 @@ public class InfluxDBClient extends com.yahoo.ycsb.DB {
             .url(baseURL + "/write?db=" + db)
             .post(body)
             .build();
+        
         final Response response = httpClient.newCall(post).execute();
         if (!response.isSuccessful()) {
           System.out.println(response.message());
@@ -361,6 +369,19 @@ public class InfluxDBClient extends com.yahoo.ycsb.DB {
       return timestamp * 1000;
     case SECONDS:
       return timestamp * 1000 * 1000;
+    default:
+      throw new IllegalArgumentException("Not supporting units: " + timeUnits);
+    }
+  }
+  
+  public long timestampToMillis(final long timestamp) {
+    switch (timeUnits) {
+    case NANOSECONDS:
+      return timestamp / 1000;
+    case MILLISECONDS:
+      return timestamp;
+    case SECONDS:
+      return timestamp * 1000;
     default:
       throw new IllegalArgumentException("Not supporting units: " + timeUnits);
     }
