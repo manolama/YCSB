@@ -16,7 +16,9 @@
  */
 package com.yahoo.ycsb;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
 
 /**
  *  A ByteIterator that iterates through an inputstream of bytes.
@@ -25,11 +27,16 @@ public class InputStreamByteIterator extends ByteIterator {
   private long len;
   private InputStream ins;
   private long off;
+  private boolean resetable;
 
   public InputStreamByteIterator(InputStream ins, long len) {
     this.len = len;
     this.ins = ins;
     off = 0;
+    resetable = ins.markSupported();
+    if (resetable) {
+      ins.mark((int) len);
+    }
   }
 
   @Override
@@ -59,6 +66,31 @@ public class InputStreamByteIterator extends ByteIterator {
 
 	@Override
 	public void reset() {
+	  if (resetable) {
+	    try {
+        ins.reset();
+        ins.mark((int) len);
+      } catch (IOException e) {
+        throw new IllegalStateException("Failed to reset the input stream", e);
+      }
+	  }
 	  throw new UnsupportedOperationException();
+	}
+	
+	@Override
+	public int hashCode() {
+	  if (resetable) {
+	    final byte[] buf = new byte[(int) len];
+	    try {
+        ins.read(buf, 0, (int) len);
+      } catch (IOException e) {
+        throw new IllegalStateException("Failed to read the input stream", e);
+      }
+	    reset();
+	    return Arrays.hashCode(buf);
+	  }
+	  // Ugg, I don't want to throw an exception and break everything but this
+	  // will sorta kinda work almost
+	  return ins.hashCode() ^ (int) len;
 	}
 }

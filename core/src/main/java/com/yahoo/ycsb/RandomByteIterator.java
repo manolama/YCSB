@@ -16,6 +16,8 @@
  */
 package com.yahoo.ycsb;
 
+import java.util.Arrays;
+
 /**
  *  A ByteIterator that generates a random sequence of bytes.
  */
@@ -97,5 +99,11 @@ public class RandomByteIterator extends ByteIterator {
   @Override
   public void reset() {
     off = 0;
+  }
+
+  @Override
+  public int hashCode() {
+    // TODO - figure out a way to implement this properly
+    throw new UnsupportedOperationException("Random byt iterators can't be used for hashing.");
   }
 }

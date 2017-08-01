@@ -17,14 +17,30 @@
 
 package com.yahoo.ycsb;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.Map.Entry;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
+
+import org.HdrHistogram.AbstractHistogram.LinearBucketValues;
+import org.HdrHistogram.Histogram;
+import org.HdrHistogram.HistogramIterationValue;
+import org.HdrHistogram.Recorder;
+
+import com.yahoo.ycsb.Workload.Operation;
 
 /**
  * Basic DB that just prints out the requested operations, instead of doing them against a database.
  */
 public class BasicDB extends DB {
+  public static final String COUNT = "basicdb.counts";
+  public static final String COUNT_DEFAULT = "false";
+  
   public static final String VERBOSE = "basicdb.verbose";
   public static final String VERBOSE_DEFAULT = "true";
 
@@ -34,9 +50,19 @@ public class BasicDB extends DB {
   public static final String RANDOMIZE_DELAY = "basicdb.randomizedelay";
   public static final String RANDOMIZE_DELAY_DEFAULT = "true";
 
+  protected static final Object MUTEX = new Object();
+  protected static int COUNTER = 0;
+  
+  protected static Map<Integer, Integer> READS;
+  protected static Map<Integer, Integer> SCANS;
+  protected static Map<Integer, Integer> UPDATES;
+  protected static Map<Integer, Integer> INSERTS;
+  protected static Map<Integer, Integer> DELETES;
+  
   protected boolean verbose;
   protected boolean randomizedelay;
   protected int todelay;
+  protected boolean count;
 
   public BasicDB() {
     todelay = 0;
@@ -65,11 +91,23 @@ public class BasicDB extends DB {
    * Initialize any state for this DB.
    * Called once per DB instance; there is one DB instance per client thread.
    */
-  @SuppressWarnings("unchecked")
   public void init() {
     verbose = Boolean.parseBoolean(getProperties().getProperty(VERBOSE, VERBOSE_DEFAULT));
     todelay = Integer.parseInt(getProperties().getProperty(SIMULATE_DELAY, SIMULATE_DELAY_DEFAULT));
     randomizedelay = Boolean.parseBoolean(getProperties().getProperty(RANDOMIZE_DELAY, RANDOMIZE_DELAY_DEFAULT));
+    count = Boolean.parseBoolean(getProperties().getProperty(COUNT, COUNT_DEFAULT));
+    
+    synchronized (MUTEX) {
+      if (COUNTER == 0 && count) {
+        READS = new HashMap<Integer, Integer>();
+        SCANS = new HashMap<Integer, Integer>();
+        UPDATES = new HashMap<Integer, Integer>();
+        INSERTS = new HashMap<Integer, Integer>();
+        DELETES = new HashMap<Integer, Integer>();
+      }
+      COUNTER++;
+    }
+    
     if (verbose) {
       synchronized (System.out) {
         System.out.println("***************** properties *****************");
@@ -109,7 +147,7 @@ public class BasicDB extends DB {
    */
   public Status read(String table, String key, Set<String> fields, HashMap<String, ByteIterator> result) {
     delay();
-
+    
     if (verbose) {
       StringBuilder sb = getStringBuilder();
       sb.append("READ ").append(table).append(" ").append(key).append(" [ ");
@@ -125,6 +163,9 @@ public class BasicDB extends DB {
       System.out.println(sb);
     }
 
+    if (count) {
+      incCounter(READS, hash(table, key, fields));
+    }
     return Status.OK;
   }
 
@@ -142,7 +183,7 @@ public class BasicDB extends DB {
   public Status scan(String table, String startkey, int recordcount, Set<String> fields,
                      Vector<HashMap<String, ByteIterator>> result) {
     delay();
-
+    
     if (verbose) {
       StringBuilder sb = getStringBuilder();
       sb.append("SCAN ").append(table).append(" ").append(startkey).append(" ").append(recordcount).append(" [ ");
@@ -156,6 +197,10 @@ public class BasicDB extends DB {
 
       sb.append("]");
       System.out.println(sb);
+    }
+
+    if (count) {
+      incCounter(SCANS, hash(table, startkey, fields));
     }
 
     return Status.OK;
@@ -172,7 +217,7 @@ public class BasicDB extends DB {
    */
   public Status update(String table, String key, HashMap<String, ByteIterator> values) {
     delay();
-
+    
     if (verbose) {
       StringBuilder sb = getStringBuilder();
       sb.append("UPDATE ").append(table).append(" ").append(key).append(" [ ");
@@ -185,6 +230,9 @@ public class BasicDB extends DB {
       System.out.println(sb);
     }
 
+    if (count) {
+      incCounter(UPDATES, hash(table, key, values));
+    }
     return Status.OK;
   }
 
@@ -199,7 +247,7 @@ public class BasicDB extends DB {
    */
   public Status insert(String table, String key, HashMap<String, ByteIterator> values) {
     delay();
-
+    
     if (verbose) {
       StringBuilder sb = getStringBuilder();
       sb.append("INSERT ").append(table).append(" ").append(key).append(" [ ");
@@ -211,6 +259,10 @@ public class BasicDB extends DB {
 
       sb.append("]");
       System.out.println(sb);
+    }
+
+    if (count) {
+      incCounter(INSERTS, hash(table, key, values));
     }
 
     return Status.OK;
@@ -233,9 +285,90 @@ public class BasicDB extends DB {
       System.out.println(sb);
     }
 
+    if (count) {
+      incCounter(DELETES, (table + key).hashCode());
+    }
+    
     return Status.OK;
   }
-
+  
+  @Override
+  public void cleanup() {
+    synchronized (MUTEX) {
+      int countDown = --COUNTER;
+      if (count && countDown < 1) {
+//        Recorder recorder = new Recorder(3);
+//        long max = 0;
+//        for (final Entry<Integer, Integer> entry : INSERTS.entrySet()) {
+////          recorder.recordValue(value);
+////          if (value > max) {
+////            max = value;
+////          }
+//          System.out.println("Hash: " + entry.getKey() + "  C: " + entry.getValue());
+//        }
+//        final Histogram h = recorder.getIntervalHistogram();
+//        long sum = 0;
+//        System.out.println(".......................");
+//        System.out.flush();
+//        //System.out.println("HTV: " + max);
+//        long v = max / 50;
+//        for (int i = 0; i < 50; i++) {
+//          long c = h.getCountBetweenValues(v * i, (v * i + 1));
+//          System.out.println("HMM: " + c);
+//          sum += c;
+//        }
+////        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+////        PrintStream ps = new PrintStream(baos);
+////        h.outputPercentileDistribution(ps, 1.0);
+////        try {
+////          System.out.println("DIST: " + baos.toString("UTF8"));
+////        } catch (UnsupportedEncodingException e) {
+////          // TODO Auto-generated catch block
+////          e.printStackTrace();
+////        }
+////        for (int i = 0; i < 105; i++) {
+////          //System.out.println("[H], v, " + i + "%  " + h.getValueAtPercentile((double) i));
+////          long v = h.getCountAtValue(i);
+////          sum += v;
+////          System.out.println("[H], v, " + i + "%  " + v);
+////        }
+//        System.out.println("------------- " + sum);
+        System.out.println("[READS], Uniques, " + READS.size());
+        System.out.println("[SCANS], Uniques, " + SCANS.size());
+        System.out.println("[UPDATES], Uniques, " + UPDATES.size());
+        System.out.println("[INSERTS], Uniques, " + INSERTS.size());
+        System.out.println("[DELETES], Uniques, " + DELETES.size());
+      }
+    }
+  }
+  
+  protected void incCounter(final Map<Integer, Integer> map, final int hash) {
+    synchronized (map) {
+      Integer ctr = map.get(hash);
+      if (ctr == null) {
+        map.put(hash, 1);
+      } else {
+        map.put(hash, ctr + 1);
+      }
+    }
+  }
+  
+  protected int hash(final String table, final String key, final Set<String> fields) {
+    if (fields == null) {
+      return Objects.hash(table, key);
+    }
+    List<String> sorted = new ArrayList<String>(fields);
+    return Objects.hash(table, key, sorted);
+  }
+  
+  protected int hash(final String table, final String key, final HashMap<String, ByteIterator> values) {
+    if (values == null) {
+      return Objects.hash(table, key);
+    }
+    final TreeMap<String, ByteIterator> sorted = new TreeMap<String, ByteIterator>(values);
+    
+    return Objects.hash(table, key, sorted);
+  }
   /**
    * Short test of BasicDB
    */

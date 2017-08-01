@@ -16,6 +16,8 @@
  */
 package com.yahoo.ycsb;
 
+import java.util.Arrays;
+
 /**
  *  A ByteIterator that iterates through a byte array.
  */
@@ -57,5 +59,19 @@ public class ByteArrayByteIterator extends ByteIterator {
 	@Override
 	public void reset() {
 	  off = originalOffset;
+	}
+
+	@Override
+	public int hashCode() {
+	  // short circuit
+	  if (off == 0 && len == str.length) {
+	    return Arrays.hashCode(str);
+	  }
+	  final byte[] clone = new byte[len];
+	  int x = 0;
+	  for (int i = off; i < len; i++) {
+	    clone[x++] = str[i];
+	  }
+	  return Arrays.hashCode(clone);
 	}
 }

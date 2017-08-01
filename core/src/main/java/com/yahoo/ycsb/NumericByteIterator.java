@@ -16,6 +16,8 @@
  */
 package com.yahoo.ycsb;
 
+import java.util.Arrays;
+
 /**
  * A byte iterator that handles encoding and decoding numeric values.
  * Currently this iterator can handle 64 bit signed values and double precision
@@ -74,5 +76,10 @@ public class NumericByteIterator extends ByteIterator {
 
   public boolean isFloatingPoint() {
     return floatingPoint;
+  }
+  
+  @Override
+  public int hashCode() {
+    return Arrays.hashCode(payload);
   }
 }

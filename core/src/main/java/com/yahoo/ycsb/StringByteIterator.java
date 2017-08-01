@@ -118,4 +118,9 @@ public class StringByteIterator extends ByteIterator {
   public void reset() {
     off = 0;
   }
+
+	@Override
+	public int hashCode() {
+	  return str.substring(off).hashCode();
+	}
 }

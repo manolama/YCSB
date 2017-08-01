@@ -161,6 +161,7 @@ public class TimeseriesWorkload extends Workload {
     if (recordcount == 0) {
       recordcount = Integer.MAX_VALUE;
     }
+    System.out.println("RECORD COUNT: " + recordcount);
     
     randomizeTimestampOrder = Boolean.parseBoolean(p.getProperty(
         RANDOMIZE_TIMESTAMP_ORDER_PROPERTY, 
@@ -211,6 +212,7 @@ public class TimeseriesWorkload extends Workload {
         break;
       }
     }
+    System.out.println("TOTAL CARD: " + totalCardinality);
     if (numKeys < threads) {
       throw new WorkloadException("Field count " + numKeys + " (keys for time "
           + "series workloads) must be greater or equal to the number of "
@@ -351,23 +353,31 @@ public class TimeseriesWorkload extends Workload {
 
   protected boolean doTransactionRead(final DB db, Object threadstate) {
     final String keyname = keys[Utils.random().nextInt(keys.length)];
-    final ThreadState state = (ThreadState)threadstate;
+    final ThreadState state = (ThreadState) threadstate;
     
     final long timestamp = state.startTimestamp + 
         state.timestampGenerator.getOffset(Utils.random().nextInt(state.maxOffsets));
     
     // rando tags
     HashSet<String> fields = new HashSet<String>();
+    int rndKey = Utils.random().nextInt(tagKeys.length);
+    int rndValue = Utils.random().nextInt(tagValues.length);
     for (int i = 0; i < tagPairs; ++i) {
       if (groupBy && groupBys[i]) {
         fields.add(tagKeys[i]);
       } else {
-        fields.add(tagKeys[i] + tagPairDelimiter + tagValues[i][Utils.random().nextInt(tagValues[i].length)]);
+        if (rndKey >= tagKeys.length) {
+          rndKey = 0;
+        }
+        if (rndValue >= tagValues.length) {
+          rndValue = 0;
+        }
+        fields.add(tagKeys[rndKey++] + tagPairDelimiter + tagValues[rndValue][Utils.random().nextInt(tagValues[rndValue++].length)]);
       }
     }
     // TODO - only query up to the time that data has been written and randomly pick
     // the timestamps to query.
-    fields.add(TIMESTAMP_KEY + tagPairDelimiter + timestamp + queryTimeSpanDelimiter + (timestamp + queryTimeSpan));
+    fields.add(TIMESTAMP_KEY + tagPairDelimiter + timestamp);
     if (groupBy) {
       fields.add(groupByKey + tagPairDelimiter + groupByFunction);
     }
@@ -496,22 +506,18 @@ public class TimeseriesWorkload extends Workload {
       }
       
       tagValueIdxs = new int[tagPairs]; // all zeros
-      
-      int intervals = 0;
-      if (randomizeTimestampOrder) {
-        intervals = (recordcount / (threadCount * keysPerThread * totalCardinality)) + 1;
-      }
-      
+      maxOffsets = (recordcount / totalCardinality);
+      System.out.println("MAX OFFSETS: " + maxOffsets);
       final String startingTimestamp = 
           properties.getProperty(CoreWorkload.INSERT_START_PROPERTY);
       if (startingTimestamp == null || startingTimestamp.isEmpty()) {
         timestampGenerator = randomizeTimestampOrder ? 
-            new RandomDiscreteTimestampGenerator(timestampInterval, timeUnits, intervals) :
+            new RandomDiscreteTimestampGenerator(timestampInterval, timeUnits, maxOffsets) :
             new UnixEpochTimestampGenerator(timestampInterval, timeUnits);
       } else {
         try {
           timestampGenerator = randomizeTimestampOrder ? 
-              new RandomDiscreteTimestampGenerator(timestampInterval, timeUnits, Long.parseLong(startingTimestamp), intervals) :
+              new RandomDiscreteTimestampGenerator(timestampInterval, timeUnits, Long.parseLong(startingTimestamp), maxOffsets) :
               new UnixEpochTimestampGenerator(timestampInterval, timeUnits, Long.parseLong(startingTimestamp));
         } catch (NumberFormatException nfe) {
           throw new WorkloadException("Unable to parse the " + 
@@ -524,12 +530,6 @@ public class TimeseriesWorkload extends Workload {
       startTimestamp = timestampGenerator.lastValue();
       interval = timestampGenerator.getOffset(1);
       threadOps = recordcount / totalThreads;
-      
-      long recordsPerTimestamp = (keyIdxEnd - keyIdxStart);
-      for (final int cardinality : tagCardinality) {
-        recordsPerTimestamp *= cardinality;
-      }
-      maxOffsets = (int)((threadOps / recordsPerTimestamp) * interval);
       
       operationchooser = CoreWorkload.createOperationGenerator(properties);
     }
@@ -556,7 +556,6 @@ public class TimeseriesWorkload extends Workload {
       
       map.put(TIMESTAMP_KEY, new NumericByteIterator(timestampGenerator.currentValue()));
       if (dataintegrity) {
-        // TODO - value should be hash of keys
         map.put(VALUE_KEY, new NumericByteIterator(validationFunction(key, 
             timestampGenerator.currentValue(), validationTags)));
       } else {

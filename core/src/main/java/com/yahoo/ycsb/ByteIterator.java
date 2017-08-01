@@ -96,4 +96,7 @@ public abstract class ByteIterator implements Iterator<Byte> {
     return ret;
   }
 
+  /** @return The hash code for this iterator. Forces implementations to provide it. */
+  public abstract int hashCode();
+  
 }

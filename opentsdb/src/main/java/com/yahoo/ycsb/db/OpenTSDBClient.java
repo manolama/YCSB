@@ -25,13 +25,17 @@ import com.yahoo.ycsb.ByteIterator;
 import com.yahoo.ycsb.DBException;
 import com.yahoo.ycsb.NumericByteIterator;
 import com.yahoo.ycsb.Status;
+import com.yahoo.ycsb.StringByteIterator;
 import com.yahoo.ycsb.Utils;
 import com.yahoo.ycsb.workloads.TimeseriesWorkload;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
+import net.opentsdb.core.DataPoint;
+import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.IncomingDataPoint;
 import net.opentsdb.core.Query;
+import net.opentsdb.core.SeekableView;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSQuery;
 import net.opentsdb.core.TSSubQuery;
@@ -43,8 +47,8 @@ import net.opentsdb.utils.JSON;
 /**
  * OpenTSDB client.
  */
-public class OpenTSDBClient20 extends com.yahoo.ycsb.DB {
-  private static final Logger LOG = (Logger)LoggerFactory.getLogger(OpenTSDBClient20.class);
+public class OpenTSDBClient extends com.yahoo.ycsb.DB {
+  private static final Logger LOG = (Logger)LoggerFactory.getLogger(OpenTSDBClient.class);
   
   public enum ClientType {
     NATIVE("native"),
@@ -288,6 +292,8 @@ public class OpenTSDBClient20 extends com.yahoo.ycsb.DB {
                      final String keyname, 
                      final Set<String> fields,
                      final HashMap<String, ByteIterator> results) {
+    
+    long timestamp = 0;
     final TSQuery query = new TSQuery();
     final TSSubQuery subQuery = new TSSubQuery();
     subQuery.setMetric(keyname);
@@ -299,6 +305,7 @@ public class OpenTSDBClient20 extends com.yahoo.ycsb.DB {
       if (pair[0].equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
         final String[] range = pair[1].split(queryTimeSpanDelimiter);
         if (range.length == 1) {
+          timestamp = Long.parseLong(range[0]);
           query.setStart(range[0]);
           query.setEnd(Long.toString(Long.parseLong(range[0]) + 
               (timestampInterval - 1 > 0 ? timestampInterval - 1 : 1)));
@@ -328,15 +335,33 @@ public class OpenTSDBClient20 extends com.yahoo.ycsb.DB {
         }
       }
     }
+    subQuery.setFilters(filters);
     query.setQueries((ArrayList<TSSubQuery>) Lists.newArrayList(subQuery)); 
     query.validateAndSetQuery();
+    System.out.println("QUERY: " + JSON.serializeToString(query));
     
-    // TODO parse
     switch (clientType) {
     case NATIVE:
       try {
-        final Query[] response = query.buildQueries(TSDB_CLIENT);
-        return Status.OK;
+        final DataPoints[] response = query.buildQueries(TSDB_CLIENT)[0].run();
+        if (response.length < 1) {
+          return Status.NOT_FOUND;
+        }
+        for (final Entry<String, String> pair : response[0].getTags().entrySet()) {
+          results.put(pair.getKey(), new StringByteIterator(pair.getValue()));
+        }
+        
+        final SeekableView iterator = response[0].iterator();
+        while (iterator.hasNext()) {
+          final DataPoint dp = iterator.next();
+          if (dp.timestamp() == timestamp) {
+            System.out.println("************************* DATA: " + dp.timestamp() + " " + dp.toDouble());
+            results.put(TimeseriesWorkload.TIMESTAMP_KEY, new NumericByteIterator(timestamp));
+            results.put(TimeseriesWorkload.VALUE_KEY, new NumericByteIterator(dp.isInteger() ? dp.longValue() : dp.doubleValue()));
+            return Status.OK;
+          }
+        }
+        return Status.NOT_FOUND;
       } catch (Exception e) {
         return Status.ERROR;
       }
