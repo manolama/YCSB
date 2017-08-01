@@ -54,7 +54,8 @@ public class BasicTSDB extends BasicDB {
       StringBuilder sb = getStringBuilder();
       sb.append("UPDATE ").append(table).append(" ").append(key).append(" [ ");
       if (values != null) {
-        for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
+        final TreeMap<String, ByteIterator> tree = new TreeMap<String, ByteIterator>(values);
+        for (Map.Entry<String, ByteIterator> entry : tree.entrySet()) {
           if (entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
             if (count) {
               timestamp = Utils.bytesToLong(entry.getValue().toArray());
@@ -106,7 +107,8 @@ public class BasicTSDB extends BasicDB {
       StringBuilder sb = getStringBuilder();
       sb.append("INSERT ").append(table).append(" ").append(key).append(" [ ");
       if (values != null) {
-        for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
+        final TreeMap<String, ByteIterator> tree = new TreeMap<String, ByteIterator>(values);
+        for (Map.Entry<String, ByteIterator> entry : tree.entrySet()) {
           if (entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
             if (count) {
               timestamp = Utils.bytesToLong(entry.getValue().toArray());
@@ -167,7 +169,14 @@ public class BasicTSDB extends BasicDB {
       }
       sorted.put(entry.getKey(), entry.getValue());
     }
-    return Objects.hash(table, key, sorted);
+//    return Objects.hash(table, key, sorted);
+    StringBuilder buf = new StringBuilder().append(table).append(key);
+    for (final Entry<String, ByteIterator> entry : sorted.entrySet()) {
+      entry.getValue().reset();
+      buf.append(entry.getKey())
+         .append(entry.getValue().toString());
+    }
+    return buf.toString().hashCode();
   }
   
 }

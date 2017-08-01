@@ -86,7 +86,7 @@ public class TimeseriesWorkload extends Workload {
   public static final String RANDOMIZE_TIMESERIES_ORDER_PROPERTY_DEFAULT = "true";
   
   public static final String VALUE_TYPE_PROPERTY = "value_type";
-  public static final String VALUE_TYPE_PROPERTY_DEFAULT = "floating";
+  public static final String VALUE_TYPE_PROPERTY_DEFAULT = "floats";
   
   // Query params
   public static final String QUERY_TIMESPAN_PROPERTY = "query_timespan";

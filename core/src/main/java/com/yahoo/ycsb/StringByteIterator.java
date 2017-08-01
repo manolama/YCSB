@@ -121,6 +121,9 @@ public class StringByteIterator extends ByteIterator {
 
 	@Override
 	public int hashCode() {
+	  if (off == 0) {
+	    return str.hashCode();
+	  }
 	  return str.substring(off).hashCode();
 	}
 }

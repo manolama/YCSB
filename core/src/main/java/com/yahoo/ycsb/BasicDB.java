@@ -355,19 +355,31 @@ public class BasicDB extends DB {
   
   protected int hash(final String table, final String key, final Set<String> fields) {
     if (fields == null) {
-      return Objects.hash(table, key);
+      return (table + key).hashCode();
     }
+    StringBuilder buf = new StringBuilder().append(table).append(key);
     List<String> sorted = new ArrayList<String>(fields);
-    return Objects.hash(table, key, sorted);
+    Collections.sort(sorted);
+    for (final String field : sorted) {
+      buf.append(field);
+    }
+    return buf.toString().hashCode();
   }
   
   protected int hash(final String table, final String key, final HashMap<String, ByteIterator> values) {
     if (values == null) {
-      return Objects.hash(table, key);
+      return (table + key).hashCode();
     }
-    final TreeMap<String, ByteIterator> sorted = new TreeMap<String, ByteIterator>(values);
+    final TreeMap<String, ByteIterator> sorted = 
+        new TreeMap<String, ByteIterator>(values);
     
-    return Objects.hash(table, key, sorted);
+    StringBuilder buf = new StringBuilder().append(table).append(key);
+    for (final Entry<String, ByteIterator> entry : sorted.entrySet()) {
+      entry.getValue().reset();
+      buf.append(entry.getKey())
+         .append(entry.getValue().toString());
+    }
+    return buf.toString().hashCode();
   }
   /**
    * Short test of BasicDB
