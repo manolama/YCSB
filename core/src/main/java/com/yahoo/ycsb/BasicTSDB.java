@@ -1,6 +1,7 @@
 package com.yahoo.ycsb;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
@@ -42,6 +43,55 @@ public class BasicTSDB extends BasicDB {
     queryTimeSpanDelimiter = getProperties().getProperty(
         TimeseriesWorkload.QUERY_TIMESPAN_DELIMITER_PROPERTY,
         TimeseriesWorkload.QUERY_TIMESPAN_DELIMITER_PROPERTY_DEFAULT);
+  }
+  
+  public Status read(String table, String key, Set<String> fields, HashMap<String, ByteIterator> result) {
+    delay();
+    
+    if (verbose) {
+      StringBuilder sb = getStringBuilder();
+      sb.append("READ ").append(table).append(" ").append(key).append(" [ ");
+      if (fields != null) {
+        for (String f : fields) {
+          sb.append(f).append(" ");
+        }
+      } else {
+        sb.append("<all fields>");
+      }
+
+      sb.append("]");
+      System.out.println(sb);
+    }
+
+    if (count) {
+      Set<String> filtered = null;
+      if (fields != null) {
+        filtered = new HashSet<String>();
+        for (final String field : fields) {
+          if (field.startsWith(TimeseriesWorkload.TIMESTAMP_KEY)) {
+            String[] parts = field.split(tagPairDelimiter);
+            if (parts[1].contains(queryTimeSpanDelimiter)) {
+              parts = parts[1].split(queryTimeSpanDelimiter);
+              lastTimestamp = Long.parseLong(parts[0]);
+            } else {
+              lastTimestamp = Long.parseLong(parts[1]);
+            }
+            synchronized(TIMESTAMPS) {
+              Integer ctr = TIMESTAMPS.get(lastTimestamp);
+              if (ctr == null) {
+                TIMESTAMPS.put(lastTimestamp, 1);
+              } else {
+                TIMESTAMPS.put(lastTimestamp, ctr + 1);
+              }
+            }
+          } else {
+            filtered.add(field);
+          }
+        }
+      }
+      incCounter(READS, hash(table, key, filtered));
+    }
+    return Status.OK;
   }
   
   @Override
@@ -147,6 +197,19 @@ public class BasicTSDB extends BasicDB {
       System.out.println("[TIMESTAMPS], Unique, " + TIMESTAMPS.size());
       System.out.println("[FLOATS], Unique, " + FLOATS.size());
       System.out.println("[INTEGERS], Unique, " + INTEGERS.size());
+      
+      long minTs = Long.MAX_VALUE;
+      long maxTs = Long.MIN_VALUE;
+      for (final long ts : TIMESTAMPS.keySet()) {
+        if (ts > maxTs) {
+          maxTs = ts;
+        }
+        if (ts < minTs) {
+          minTs = ts;
+        }
+      }
+      System.out.println("[TIMESTAMPS], Min, " + minTs);
+      System.out.println("[TIMESTAMPS], Max, " + maxTs);
     }
   }
   

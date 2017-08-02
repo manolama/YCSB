@@ -88,9 +88,15 @@ public class TimeseriesWorkload extends Workload {
   public static final String VALUE_TYPE_PROPERTY = "value_type";
   public static final String VALUE_TYPE_PROPERTY_DEFAULT = "floats";
   
+  public static final String SPARSITY_PROPERTY = "sparsity";
+  public static final String SPARSITY_PROPERTY_DEFAULT = "0.00";
+  
   // Query params
   public static final String QUERY_TIMESPAN_PROPERTY = "query_timespan";
-  public static final String QUERY_TIMESPAN_PROPERTY_DEFAULT = "3600";
+  public static final String QUERY_TIMESPAN_PROPERTY_DEFAULT = "0";
+  
+  public static final String QUERY_RANDOM_TIMESPAN_PROPERTY = "query_random_timespan";
+  public static final String QUERY_RANDOM_TIMESPAN_PROPERTY_DEFAULT = "false";
   
   public static final String QUERY_TIMESPAN_DELIMITER_PROPERTY = "query_timespan_delimiter";
   public static final String QUERY_TIMESPAN_DELIMITER_PROPERTY_DEFAULT = ",";
@@ -132,10 +138,11 @@ public class TimeseriesWorkload extends Workload {
   private int[] tagCardinality;
   private String[] tagValues;
   private int firstIncrementableCardinality;
-  private double sparcity = 0.99;
+  private double sparsity;
   
   // Query parameters
   private int queryTimeSpan;
+  private boolean queryRandomTimeSpan;
   private String tagPairDelimiter;
   private String queryTimeSpanDelimiter;
   private boolean groupBy;
@@ -189,6 +196,7 @@ public class TimeseriesWorkload extends Workload {
         CoreWorkload.FIELD_COUNT_PROPERTY_DEFAULT));
     tagPairs = Integer.parseInt(p.getProperty(TAG_COUNT_PROPERTY, 
         TAG_COUNT_PROPERTY_DEFAULT));
+    sparsity = Double.parseDouble(p.getProperty(SPARSITY_PROPERTY, SPARSITY_PROPERTY_DEFAULT));
     tagCardinality = new int[tagPairs];
     final String tagCardinalityString = p.getProperty(TAG_CARDINALITY_PROPERTY, 
         TAG_CARDINALITY_PROPERTY_DEFAULT);
@@ -288,6 +296,8 @@ public class TimeseriesWorkload extends Workload {
     
     queryTimeSpan = Integer.parseInt(p.getProperty(QUERY_TIMESPAN_PROPERTY, 
         QUERY_TIMESPAN_PROPERTY_DEFAULT));
+    queryRandomTimeSpan = Boolean.parseBoolean(p.getProperty(QUERY_RANDOM_TIMESPAN_PROPERTY, 
+        QUERY_RANDOM_TIMESPAN_PROPERTY_DEFAULT));
     queryTimeSpanDelimiter = p.getProperty(QUERY_TIMESPAN_DELIMITER_PROPERTY, 
         QUERY_TIMESPAN_DELIMITER_PROPERTY_DEFAULT);
     
@@ -358,13 +368,12 @@ public class TimeseriesWorkload extends Workload {
     final String keyname = keys[Utils.random().nextInt(keys.length)];
     final ThreadState state = (ThreadState) threadstate;
     
-    final long timestamp = state.startTimestamp + 
+    long startTimestamp = state.startTimestamp + 
         state.timestampGenerator.getOffset(Utils.random().nextInt(state.maxOffsets));
     
     // rando tags
     HashSet<String> fields = new HashSet<String>();
     int rndKey = Utils.random().nextInt(tagKeys.length);
-    int rndValue = Utils.random().nextInt(tagValues.length);
     for (int i = 0; i < tagPairs; ++i) {
       if (groupBy && groupBys[i]) {
         fields.add(tagKeys[i]);
@@ -372,15 +381,22 @@ public class TimeseriesWorkload extends Workload {
         if (rndKey >= tagKeys.length) {
           rndKey = 0;
         }
-        if (rndValue >= tagValues.length) {
-          rndValue = 0;
-        }
-        fields.add(tagKeys[rndKey++] + tagPairDelimiter + tagValues[Utils.random().nextInt(tagCardinality[rndValue++])]);
+        fields.add(tagKeys[rndKey++] + tagPairDelimiter + 
+            tagValues[Utils.random().nextInt(tagCardinality[i])]);
       }
     }
-    // TODO - only query up to the time that data has been written and randomly pick
-    // the timestamps to query.
-    fields.add(TIMESTAMP_KEY + tagPairDelimiter + timestamp);
+    
+    if (queryTimeSpan > 0) {
+      final long endTimestamp;
+      if (queryRandomTimeSpan) {
+        endTimestamp = startTimestamp + (timestampInterval * Utils.random().nextInt(queryTimeSpan / timestampInterval));
+      } else {
+        endTimestamp = startTimestamp + queryTimeSpan;
+      }
+      fields.add(TIMESTAMP_KEY + tagPairDelimiter + startTimestamp + queryTimeSpanDelimiter + endTimestamp);
+    } else {
+      fields.add(TIMESTAMP_KEY + tagPairDelimiter + startTimestamp);  
+    }
     if (groupBy) {
       fields.add(groupByKey + tagPairDelimiter + groupByFunction);
     }
@@ -509,8 +525,7 @@ public class TimeseriesWorkload extends Workload {
       }
       
       tagValueIdxs = new int[tagPairs]; // all zeros
-      maxOffsets = (recordcount / totalCardinality);
-      System.out.println("MAX OFFSETS: " + maxOffsets);
+      maxOffsets = (recordcount / totalCardinality) + 1;
       final String startingTimestamp = 
           properties.getProperty(CoreWorkload.INSERT_START_PROPERTY);
       if (startingTimestamp == null || startingTimestamp.isEmpty()) {
@@ -538,8 +553,10 @@ public class TimeseriesWorkload extends Workload {
     }
     
     private String nextDataPoint(HashMap<String, ByteIterator> map) {
-      int iterations = sparcity <= 0 ? 1 : Utils.random().nextInt((int) ((double) seriesCardinality * sparcity));
-      
+      int iterations = sparsity <= 0 ? 1 : Utils.random().nextInt((int) ((double) seriesCardinality * sparsity));
+      if (iterations < 1) {
+        iterations = 1;
+      }
       while (true) {
         iterations--;
         if (rollover) {
