@@ -27,7 +27,8 @@ import com.yahoo.ycsb.generator.UniformIntegerGenerator;
 public class YCSBSCRATCH {
 
   public static void main(String[] args) {
-    randoTimestamps();
+    sparsity();
+    //randoTimestamps();
     //beano();
     //randomPrintableStringGenerator();
     //stringByteIterator();
@@ -196,5 +197,33 @@ public class YCSBSCRATCH {
       System.out.println(gen.nextValue());
     }
     
+  }
+  
+  static void sparsity() {
+    List<Integer> set = new ArrayList<Integer>();
+    set.add(0);
+    set.add(1);
+    set.add(2);
+    set.add(3);
+    set.add(4);
+    set.add(5);
+    set.add(6);
+    set.add(7);
+    set.add(8);
+    set.add(9);
+    
+    double sparsity = 0.15; // % we want to skip
+    double idx = 0;
+    double inc = ((double) set.size() * sparsity);
+    idx = inc;
+    System.out.println("INC: " + inc);
+    for (int i = 0; i < 20; i++) {
+      if (Math.round(idx) >= set.size()) {
+        idx = (idx - (double) set.size());
+        System.out.println("--------- rolled: " + idx);
+      }
+      System.out.println("PICK: " + set.get((int) Math.round(idx)));
+      idx += inc;
+    }
   }
 }

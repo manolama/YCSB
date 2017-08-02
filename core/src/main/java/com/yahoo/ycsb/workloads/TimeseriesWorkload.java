@@ -119,6 +119,7 @@ public class TimeseriesWorkload extends Workload {
   private boolean randomizeTimeseriesOrder;
   private ValueType valueType;
   private int totalCardinality;
+  private int seriesCardinality;
   
   private int recordcount;
   private int tagPairs;
@@ -194,6 +195,7 @@ public class TimeseriesWorkload extends Workload {
     final String[] tagCardinalityParts = tagCardinalityString.split(",");
     int idx = 0;
     totalCardinality = numKeys;
+    seriesCardinality = 1;
     for (final String cardinality : tagCardinalityParts) {
       try {
         tagCardinality[idx] = Integer.parseInt(cardinality.trim());
@@ -206,6 +208,7 @@ public class TimeseriesWorkload extends Workload {
             tagCardinality[idx]);
       }
       totalCardinality *= tagCardinality[idx];
+      seriesCardinality *= tagCardinality[idx];
       ++idx;
       if (idx >= tagPairs) {
         // we have more cardinalities than tag keys so bail at this point.
@@ -213,6 +216,7 @@ public class TimeseriesWorkload extends Workload {
       }
     }
     System.out.println("TOTAL CARD: " + totalCardinality);
+    System.out.println("SERIES CARD: " + seriesCardinality);
     if (numKeys < threads) {
       throw new WorkloadException("Field count " + numKeys + " (keys for time "
           + "series workloads) must be greater or equal to the number of "

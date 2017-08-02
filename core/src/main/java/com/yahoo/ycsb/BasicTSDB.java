@@ -22,6 +22,7 @@ public class BasicTSDB extends BasicDB {
   
   private String tagPairDelimiter;
   private String queryTimeSpanDelimiter;
+  private long lastTimestamp;
   
   @Override
   public void init() {
@@ -47,7 +48,6 @@ public class BasicTSDB extends BasicDB {
   public Status update(String table, String key, HashMap<String, ByteIterator> values) {
     delay();
 
-    long timestamp = 0;
     boolean isFloat = false;
     
     if (verbose) {
@@ -57,10 +57,6 @@ public class BasicTSDB extends BasicDB {
         final TreeMap<String, ByteIterator> tree = new TreeMap<String, ByteIterator>(values);
         for (Map.Entry<String, ByteIterator> entry : tree.entrySet()) {
           if (entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
-            if (count) {
-              timestamp = Utils.bytesToLong(entry.getValue().toArray());
-              entry.getValue().reset();
-            }
             sb.append(entry.getKey()).append("=").append(Utils.bytesToLong(entry.getValue().toArray())).append(" ");
           } else if (entry.getKey().equals(TimeseriesWorkload.VALUE_KEY)) {
             final NumericByteIterator it = (NumericByteIterator) entry.getValue();
@@ -79,11 +75,11 @@ public class BasicTSDB extends BasicDB {
       int hash = hash(table, key, values);
       incCounter(UPDATES, hash);
       synchronized(TIMESTAMPS) {
-        Integer ctr = TIMESTAMPS.get(timestamp);
+        Integer ctr = TIMESTAMPS.get(lastTimestamp);
         if (ctr == null) {
-          TIMESTAMPS.put(timestamp, 1);
+          TIMESTAMPS.put(lastTimestamp, 1);
         } else {
-          TIMESTAMPS.put(timestamp, ctr + 1);
+          TIMESTAMPS.put(lastTimestamp, ctr + 1);
         }
       }
       if (isFloat) {
@@ -99,8 +95,7 @@ public class BasicTSDB extends BasicDB {
   @Override
   public Status insert(String table, String key, HashMap<String, ByteIterator> values) {
     delay();
-
-    long timestamp = 0;
+    
     boolean isFloat = false;
     
     if (verbose) {
@@ -110,10 +105,6 @@ public class BasicTSDB extends BasicDB {
         final TreeMap<String, ByteIterator> tree = new TreeMap<String, ByteIterator>(values);
         for (Map.Entry<String, ByteIterator> entry : tree.entrySet()) {
           if (entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
-            if (count) {
-              timestamp = Utils.bytesToLong(entry.getValue().toArray());
-              entry.getValue().reset();
-            }
             sb.append(entry.getKey()).append("=").append(Utils.bytesToLong(entry.getValue().toArray())).append(" ");
           } else if (entry.getKey().equals(TimeseriesWorkload.VALUE_KEY)) {
             final NumericByteIterator it = (NumericByteIterator) entry.getValue();
@@ -132,11 +123,11 @@ public class BasicTSDB extends BasicDB {
       int hash = hash(table, key, values);
       incCounter(INSERTS, hash);
       synchronized(TIMESTAMPS) {
-        Integer ctr = TIMESTAMPS.get(timestamp);
+        Integer ctr = TIMESTAMPS.get(lastTimestamp);
         if (ctr == null) {
-          TIMESTAMPS.put(timestamp, 1);
+          TIMESTAMPS.put(lastTimestamp, 1);
         } else {
-          TIMESTAMPS.put(timestamp, ctr + 1);
+          TIMESTAMPS.put(lastTimestamp, ctr + 1);
         }
       }
       if (isFloat) {
@@ -163,8 +154,11 @@ public class BasicTSDB extends BasicDB {
   protected int hash(final String table, final String key, final HashMap<String, ByteIterator> values) {
     final TreeMap<String, ByteIterator> sorted = new TreeMap<String, ByteIterator>();
     for (final Entry<String, ByteIterator> entry : values.entrySet()) {
-      if (entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY) || 
-          entry.getKey().equals(TimeseriesWorkload.VALUE_KEY)) {
+      if (entry.getKey().equals(TimeseriesWorkload.VALUE_KEY)) {
+        continue;
+      } else if (entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
+        lastTimestamp = ((NumericByteIterator) entry.getValue()).getLong();
+        entry.getValue().reset();
         continue;
       }
       sorted.put(entry.getKey(), entry.getValue());
