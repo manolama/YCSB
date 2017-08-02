@@ -1,6 +1,12 @@
 
-recordcount=10000
-operationcount=10000
+randomize_timeseries_order=false
+recordcount=100
+operationcount=100
 workload=com.yahoo.ycsb.workloads.TimeseriesWorkload
+fieldcount=1
+tag_cardinality = 1,2,4,1
+dataintegrity=true
+insertstart=1483228800
 
-#readproportion=0.75
+readproportion=1.0
+updateproportion=0

@@ -368,20 +368,21 @@ public class TimeseriesWorkload extends Workload {
     final String keyname = keys[Utils.random().nextInt(keys.length)];
     final ThreadState state = (ThreadState) threadstate;
     
-    long startTimestamp = state.startTimestamp + 
-        state.timestampGenerator.getOffset(Utils.random().nextInt(state.maxOffsets));
+    int offsets = Utils.random().nextInt(state.maxOffsets - 1);
+    final long startTimestamp;
+    if (offsets > 0) {
+      startTimestamp = state.startTimestamp + state.timestampGenerator.getOffset(offsets);
+    } else {
+      startTimestamp = state.startTimestamp;
+    }
     
     // rando tags
     HashSet<String> fields = new HashSet<String>();
-    int rndKey = Utils.random().nextInt(tagKeys.length);
     for (int i = 0; i < tagPairs; ++i) {
       if (groupBy && groupBys[i]) {
         fields.add(tagKeys[i]);
       } else {
-        if (rndKey >= tagKeys.length) {
-          rndKey = 0;
-        }
-        fields.add(tagKeys[rndKey++] + tagPairDelimiter + 
+        fields.add(tagKeys[i] + tagPairDelimiter + 
             tagValues[Utils.random().nextInt(tagCardinality[i])]);
       }
     }
@@ -405,9 +406,9 @@ public class TimeseriesWorkload extends Workload {
     }
     
     final HashMap<String, ByteIterator> cells = new HashMap<String, ByteIterator>();
-    db.read(table, keyname, fields, cells);
+    final Status status = db.read(table, keyname, fields, cells);
     
-    if (dataintegrity) {
+    if (dataintegrity && status == Status.OK) {
       verifyRow(keyname, cells);
     }
     
@@ -440,7 +441,7 @@ public class TimeseriesWorkload extends Workload {
   }
   
   protected Status verifyRow(final String key, final HashMap<String, ByteIterator> cells) {
-    Status verifyStatus = Status.OK;
+    Status verifyStatus = Status.UNEXPECTED_STATE;
     long startTime = System.nanoTime();
 
     double value = 0;
@@ -452,14 +453,14 @@ public class TimeseriesWorkload extends Workload {
         timestamp = it.getLong();
       } else if (entry.getKey().equals(VALUE_KEY)) {
         final NumericByteIterator it = (NumericByteIterator) entry.getValue();
-        value = it.getLong();
+        value = it.isFloatingPoint() ? it.getDouble() : it.getLong();
       } else {
         validationTags.put(entry.getKey(), entry.getValue().toString());
       }
     }
 
-    if (validationFunction(key, timestamp, validationTags) != value) {
-      verifyStatus = Status.UNEXPECTED_STATE;
+    if (validationFunction(key, timestamp, validationTags) == value) {
+      verifyStatus = Status.OK;
     }
     long endTime = System.nanoTime();
     _measurements.measure("VERIFY", (int) (endTime - startTime) / 1000);
@@ -545,7 +546,7 @@ public class TimeseriesWorkload extends Workload {
       // Set the last value properly for the timestamp, otherwise it may start 
       // one interval ago.
       timestampGenerator.nextValue();
-      startTimestamp = timestampGenerator.lastValue();
+      startTimestamp = timestampGenerator.currentValue();
       interval = timestampGenerator.getOffset(1);
       threadOps = recordcount / totalThreads;
       

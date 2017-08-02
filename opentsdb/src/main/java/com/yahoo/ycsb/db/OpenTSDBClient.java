@@ -338,24 +338,30 @@ public class OpenTSDBClient extends com.yahoo.ycsb.DB {
     subQuery.setFilters(filters);
     query.setQueries((ArrayList<TSSubQuery>) Lists.newArrayList(subQuery)); 
     query.validateAndSetQuery();
-    System.out.println("QUERY: " + JSON.serializeToString(query));
-    
+
     switch (clientType) {
     case NATIVE:
       try {
         final DataPoints[] response = query.buildQueries(TSDB_CLIENT)[0].run();
+        
         if (response.length < 1) {
+          System.out.println("--------------------------------------------------------------------------");
+          System.out.println("QUERY: " + JSON.serializeToString(query));
+          System.out.println("MATCH TIMESTAMP : " + timestamp);
+          System.out.println("NO RESPONSE FOUND.........");
           return Status.NOT_FOUND;
         }
         for (final Entry<String, String> pair : response[0].getTags().entrySet()) {
+          //System.out.println("PAIR: " + pair.getKey() + "  " + pair.getValue());
           results.put(pair.getKey(), new StringByteIterator(pair.getValue()));
         }
-        
+       
         final SeekableView iterator = response[0].iterator();
         while (iterator.hasNext()) {
           final DataPoint dp = iterator.next();
-          if (dp.timestamp() == timestamp) {
-            System.out.println("************************* DATA: " + dp.timestamp() + " " + dp.toDouble());
+          //System.out.println("************************* DATA: " + dp.timestamp() + " " + dp.toDouble()+ "  isInteger: " + dp.isInteger());
+          if (dp.timestamp() / 1000 == timestamp) {
+            //System.out.println("matched, writing the value! DATA: " + dp.timestamp() + " " + dp.toDouble() + "  isInteger: " + dp.isInteger());
             results.put(TimeseriesWorkload.TIMESTAMP_KEY, new NumericByteIterator(timestamp));
             results.put(TimeseriesWorkload.VALUE_KEY, new NumericByteIterator(dp.isInteger() ? dp.longValue() : dp.doubleValue()));
             return Status.OK;
