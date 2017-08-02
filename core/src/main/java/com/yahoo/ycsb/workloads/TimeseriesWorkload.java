@@ -132,6 +132,7 @@ public class TimeseriesWorkload extends Workload {
   private int[] tagCardinality;
   private String[] tagValues;
   private int firstIncrementableCardinality;
+  private double sparcity = 0.99;
   
   // Query parameters
   private int queryTimeSpan;
@@ -162,7 +163,6 @@ public class TimeseriesWorkload extends Workload {
     if (recordcount == 0) {
       recordcount = Integer.MAX_VALUE;
     }
-    System.out.println("RECORD COUNT: " + recordcount);
     
     randomizeTimestampOrder = Boolean.parseBoolean(p.getProperty(
         RANDOMIZE_TIMESTAMP_ORDER_PROPERTY, 
@@ -241,33 +241,23 @@ public class TimeseriesWorkload extends Workload {
     }
     
     keys = new String[numKeys];
+    tagKeys = new String[tagPairs];
+    tagValues = new String[maxCardinality];
     for (int i = 0; i < numKeys; ++i) {
       keys[i] = keyGenerator.nextString();
     }
-    if (randomizeTimeseriesOrder) {
-      Utils.shuffleArray(keys);
-    }
-    
-    tagKeys = new String[tagPairs];
-    tagValues = new String[maxCardinality];
 
     for (int i = 0; i < tagPairs; ++i) {
       tagKeys[i] = tagKeyGenerator.nextString();
-      
-//      int cardinality = tagCardinality[i];
-//      tagValues[i] = new String[cardinality];
-//      for (int x = 0; x < cardinality; ++x) {
-//        tagValues[i][x] = tagValueGenerator.nextString();
-//      }
     }
+    
     for (int i = 0; i < maxCardinality; i++) {
       tagValues[i] = tagValueGenerator.nextString();
     }
-    
     if (randomizeTimeseriesOrder) {
-      for (int i = 0; i < tagValues.length; i++) {
-        Utils.shuffleArray(tagValues);
-      }
+      Utils.shuffleArray(keys);
+      Utils.shuffleArray(tagKeys);
+      Utils.shuffleArray(tagValues);
     }
     
     // figure out the start timestamp based on the units, cardinality and interval
@@ -548,78 +538,86 @@ public class TimeseriesWorkload extends Workload {
     }
     
     private String nextDataPoint(HashMap<String, ByteIterator> map) {
-      if (rollover) {
-        timestampGenerator.nextValue();
-        rollover = false;
-      }
-      final TreeMap<String, String> validationTags;
-      if (dataintegrity) {
-        validationTags = new TreeMap<String, String>();
-      } else {
-        validationTags = null;
-      }
-      final String key = keys[keyIdx];
-      for (int i = 0; i < tagPairs; ++i) {
-        int tvidx = tagValueIdxs[i];
-        map.put(tagKeys[i], new StringByteIterator(tagValues[tvidx]));
-        if (dataintegrity) {
-          validationTags.put(tagKeys[i], tagValues[tvidx]);
+      while (true) {
+        if (rollover) {
+          timestampGenerator.nextValue();
+          rollover = false;
         }
-      }
-      
-      map.put(TIMESTAMP_KEY, new NumericByteIterator(timestampGenerator.currentValue()));
-      if (dataintegrity) {
-        map.put(VALUE_KEY, new NumericByteIterator(validationFunction(key, 
-            timestampGenerator.currentValue(), validationTags)));
-      } else {
-        switch (valueType) {
-        case INTEGERS:
-          map.put(VALUE_KEY, new NumericByteIterator(Utils.random().nextInt()));
-          break;
-        case FLOATS:
-          map.put(VALUE_KEY, new NumericByteIterator(
-              Utils.random().nextDouble() * (double) 100000));
-        case MIXED:
-          if (Utils.random().nextBoolean()) {
-            map.put(VALUE_KEY, new NumericByteIterator(Utils.random().nextInt()));
-          } else {
-            map.put(VALUE_KEY, new NumericByteIterator(
-                Utils.random().nextDouble() * (double) 100000));
+        final TreeMap<String, String> validationTags;
+        if (dataintegrity) {
+          validationTags = new TreeMap<String, String>();
+        } else {
+          validationTags = null;
+        }
+        final String key = keys[keyIdx];
+        for (int i = 0; i < tagPairs; ++i) {
+          int tvidx = tagValueIdxs[i];
+          map.put(tagKeys[i], new StringByteIterator(tagValues[tvidx]));
+          if (dataintegrity) {
+            validationTags.put(tagKeys[i], tagValues[tvidx]);
           }
-          break;
-        default:
-          throw new IllegalStateException("Somehow we didn't have a value type configured that we support: " + valueType);
-        }        
-      }
-      
-      boolean tagRollover = false;
-      for (int i = tagCardinality.length - 1; i >= 0; --i) {
-        if (tagCardinality[i] <= 1) {
-          // nothing to increment here
-          continue;
         }
         
-        if (tagValueIdxs[i] + 1 >= tagCardinality[i]) {
-          tagValueIdxs[i] = 0;
-          if (i == firstIncrementableCardinality) {
-            tagRollover = true;
+        map.put(TIMESTAMP_KEY, new NumericByteIterator(timestampGenerator.currentValue()));
+        if (dataintegrity) {
+          map.put(VALUE_KEY, new NumericByteIterator(validationFunction(key, 
+              timestampGenerator.currentValue(), validationTags)));
+        } else {
+          switch (valueType) {
+          case INTEGERS:
+            map.put(VALUE_KEY, new NumericByteIterator(Utils.random().nextInt()));
+            break;
+          case FLOATS:
+            map.put(VALUE_KEY, new NumericByteIterator(
+                Utils.random().nextDouble() * (double) 100000));
+          case MIXED:
+            if (Utils.random().nextBoolean()) {
+              map.put(VALUE_KEY, new NumericByteIterator(Utils.random().nextInt()));
+            } else {
+              map.put(VALUE_KEY, new NumericByteIterator(
+                  Utils.random().nextDouble() * (double) 100000));
+            }
+            break;
+          default:
+            throw new IllegalStateException("Somehow we didn't have a value type configured that we support: " + valueType);
+          }        
+        }
+        
+        boolean tagRollover = false;
+        for (int i = tagCardinality.length - 1; i >= 0; --i) {
+          if (tagCardinality[i] <= 1) {
+            // nothing to increment here
+            continue;
           }
-        } else {
-           ++tagValueIdxs[i];
-           break;
+          
+          if (tagValueIdxs[i] + 1 >= tagCardinality[i]) {
+            tagValueIdxs[i] = 0;
+            if (i == firstIncrementableCardinality) {
+              tagRollover = true;
+            }
+          } else {
+             ++tagValueIdxs[i];
+             break;
+          }
+        }
+        
+        if (tagRollover) {
+          if (keyIdx + 1 >= keyIdxEnd) {
+            keyIdx = keyIdxStart;
+            rollover = true;
+          } else {
+            ++keyIdx;
+          }
+        }
+        
+        if (sparcity <= 0) {
+          return key;
+        }
+        double rnd = Utils.random().nextDouble();
+        if (rnd >= sparcity) {
+          return key;
         }
       }
-      
-      if (tagRollover) {
-        if (keyIdx + 1 >= keyIdxEnd) {
-          keyIdx = keyIdxStart;
-          rollover = true;
-        } else {
-          ++keyIdx;
-        }
-      }
-      
-      return key;
     }
   }
 
