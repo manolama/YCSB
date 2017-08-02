@@ -301,6 +301,7 @@ public class OpenTSDBClient extends com.yahoo.ycsb.DB {
     
     final List<TagVFilter> filters = Lists.newArrayList();
     for (final String field : fields) {
+      //System.out.println("FIELD: " + field);
       final String[] pair = field.split(tagPairDelimiter);
       if (pair[0].equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
         final String[] range = pair[1].split(queryTimeSpanDelimiter);
@@ -316,8 +317,8 @@ public class OpenTSDBClient extends com.yahoo.ycsb.DB {
       } else if (pair[0].equals(groupByKey)) {
         subQuery.setAggregator(pair[1]);
       } else if (pair[0].equals(downsampleKey)) {
-        // TODO
-        //subQuery.setDownsample(downsample);
+        // 3 parts key, function, interval
+        subQuery.setDownsample(pair[2] + "s-" + pair[1]);
       } else {
         if (pair.length == 2) {
           filters.add(TagVFilter.Builder()
@@ -343,10 +344,10 @@ public class OpenTSDBClient extends com.yahoo.ycsb.DB {
     case NATIVE:
       try {
         final DataPoints[] response = query.buildQueries(TSDB_CLIENT)[0].run();
-        
+        System.out.println("QUERY: " + JSON.serializeToString(query));
         if (response.length < 1) {
           System.out.println("--------------------------------------------------------------------------");
-          System.out.println("QUERY: " + JSON.serializeToString(query));
+          
           System.out.println("MATCH TIMESTAMP : " + timestamp);
           System.out.println("NO RESPONSE FOUND.........");
           return Status.NOT_FOUND;

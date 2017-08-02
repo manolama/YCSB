@@ -5,8 +5,15 @@ operationcount=100
 workload=com.yahoo.ycsb.workloads.TimeseriesWorkload
 fieldcount=1
 tag_cardinality = 1,2,4,1
-dataintegrity=true
+#dataintegrity=true
 insertstart=1483228800
 
 readproportion=1.0
 updateproportion=0
+
+
+group_by_keys=0,0,1,0
+group_by_function=sum
+
+downsampling_function=sum
+downsampling_interval=60

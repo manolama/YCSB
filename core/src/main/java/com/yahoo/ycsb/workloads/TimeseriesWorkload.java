@@ -7,6 +7,7 @@ import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Random;
 import java.util.TreeMap;
+import java.util.Vector;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
@@ -23,8 +24,11 @@ import com.yahoo.ycsb.WorkloadException;
 import com.yahoo.ycsb.generator.DiscreteGenerator;
 import com.yahoo.ycsb.generator.Generator;
 import com.yahoo.ycsb.generator.IncrementingPrintableStringGenerator;
+import com.yahoo.ycsb.generator.NumberGenerator;
 import com.yahoo.ycsb.generator.RandomDiscreteTimestampGenerator;
+import com.yahoo.ycsb.generator.UniformIntegerGenerator;
 import com.yahoo.ycsb.generator.UnixEpochTimestampGenerator;
+import com.yahoo.ycsb.generator.ZipfianGenerator;
 import com.yahoo.ycsb.measurements.Measurements;
 
 public class TimeseriesWorkload extends Workload {  
@@ -79,11 +83,14 @@ public class TimeseriesWorkload extends Workload {
   public static final String PAIR_DELIMITER_PROPERTY = "tag_pair_delimiter";
   public static final String PAIR_DELIMITER_PROPERTY_DEFAULT = "=";
   
+  public static final String DELETE_DELIMITER_PROPERTY = "delete_delimiter";
+  public static final String DELETE_DELIMITER_PROPERTY_DEFAULT = ":";
+  
   public static final String RANDOMIZE_TIMESTAMP_ORDER_PROPERTY = "randomize_timestamp_order";
   public static final String RANDOMIZE_TIMESTAMP_ORDER_PROPERTY_DEFAULT = "false";
   
   public static final String RANDOMIZE_TIMESERIES_ORDER_PROPERTY = "randomize_timeseries_order";
-  public static final String RANDOMIZE_TIMESERIES_ORDER_PROPERTY_DEFAULT = "true";
+  public static final String RANDOMIZE_TIMESERIES_ORDER_PROPERTY_DEFAULT = "false";
   
   public static final String VALUE_TYPE_PROPERTY = "value_type";
   public static final String VALUE_TYPE_PROPERTY_DEFAULT = "floats";
@@ -111,7 +118,8 @@ public class TimeseriesWorkload extends Workload {
   public static final String DOWNSAMPLING_KEY_PROPERTY = "downsampling_key";
   public static final String DOWNSAMPLING_KEY_PROPERTY_DEFAULT = "YCSBDS";
   
-  public static final String DOWNSAMPLING_PROPERTY = "downsampling_function";
+  public static final String DOWNSAMPLING_FUNCTION_PROPERTY = "downsampling_function";
+  public static final String DOWNSAMPLING_INTERVAL_PROPERTY = "downsampling_interval";
   
   private Properties properties;
   
@@ -126,6 +134,7 @@ public class TimeseriesWorkload extends Workload {
   private ValueType valueType;
   private int totalCardinality;
   private int seriesCardinality;
+  protected NumberGenerator scanlength;
   
   private int recordcount;
   private int tagPairs;
@@ -144,6 +153,7 @@ public class TimeseriesWorkload extends Workload {
   private int queryTimeSpan;
   private boolean queryRandomTimeSpan;
   private String tagPairDelimiter;
+  private String deleteDelimiter;
   private String queryTimeSpanDelimiter;
   private boolean groupBy;
   private String groupByKey;
@@ -152,6 +162,7 @@ public class TimeseriesWorkload extends Workload {
   private boolean downsample;
   private String downsampleKey;
   private String downsampleFunction;
+  private int downsampleInterval;
 
   /**
    * Set to true if want to check correctness of reads. Must also
@@ -169,6 +180,22 @@ public class TimeseriesWorkload extends Workload {
             Client.DEFAULT_RECORD_COUNT));
     if (recordcount == 0) {
       recordcount = Integer.MAX_VALUE;
+    }
+    
+    int maxscanlength =
+        Integer.parseInt(p.getProperty(CoreWorkload.MAX_SCAN_LENGTH_PROPERTY, 
+            CoreWorkload.MAX_SCAN_LENGTH_PROPERTY_DEFAULT));
+    String scanlengthdistrib =
+        p.getProperty(CoreWorkload.SCAN_LENGTH_DISTRIBUTION_PROPERTY, 
+            CoreWorkload.SCAN_LENGTH_DISTRIBUTION_PROPERTY_DEFAULT);
+    
+    if (scanlengthdistrib.compareTo("uniform") == 0) {
+      scanlength = new UniformIntegerGenerator(1, maxscanlength);
+    } else if (scanlengthdistrib.compareTo("zipfian") == 0) {
+      scanlength = new ZipfianGenerator(1, maxscanlength);
+    } else {
+      throw new WorkloadException(
+          "Distribution \"" + scanlengthdistrib + "\" not allowed for scan length");
     }
     
     randomizeTimestampOrder = Boolean.parseBoolean(p.getProperty(
@@ -289,7 +316,7 @@ public class TimeseriesWorkload extends Workload {
     }
     
     tagPairDelimiter = p.getProperty(PAIR_DELIMITER_PROPERTY, PAIR_DELIMITER_PROPERTY_DEFAULT);
-    
+    deleteDelimiter = p.getProperty(DELETE_DELIMITER_PROPERTY, DELETE_DELIMITER_PROPERTY_DEFAULT);
     dataintegrity = Boolean.parseBoolean(
         p.getProperty(CoreWorkload.DATA_INTEGRITY_PROPERTY, 
             CoreWorkload.DATA_INTEGRITY_PROPERTY_DEFAULT));
@@ -301,6 +328,7 @@ public class TimeseriesWorkload extends Workload {
     queryTimeSpanDelimiter = p.getProperty(QUERY_TIMESPAN_DELIMITER_PROPERTY, 
         QUERY_TIMESPAN_DELIMITER_PROPERTY_DEFAULT);
     
+    groupByKey = p.getProperty(GROUPBY_KEY_PROPERTY, GROUPBY_KEY_PROPERTY_DEFAULT);
     groupByFunction = p.getProperty(GROUPBY_PROPERTY);
     if (groupByFunction != null && !groupByFunction.isEmpty()) {
       final String groupByKeys = p.getProperty(GROUPBY_KEYS_PROPERTY);
@@ -317,6 +345,13 @@ public class TimeseriesWorkload extends Workload {
         groupBys[i] = Integer.parseInt(gbKeys[i].trim()) == 0 ? false : true;
       }
       groupBy = true;
+    }
+    
+    downsampleKey = p.getProperty(DOWNSAMPLING_KEY_PROPERTY, DOWNSAMPLING_KEY_PROPERTY_DEFAULT);
+    downsampleFunction = p.getProperty(DOWNSAMPLING_FUNCTION_PROPERTY);
+    if (downsampleFunction != null && !downsampleFunction.isEmpty()) {
+      downsampleInterval = Integer.parseInt(p.getProperty(DOWNSAMPLING_INTERVAL_PROPERTY));
+      downsample = true;
     }
     
     valueType = ValueType.fromString(p.getProperty(VALUE_TYPE_PROPERTY, VALUE_TYPE_PROPERTY_DEFAULT));
@@ -359,8 +394,10 @@ public class TimeseriesWorkload extends Workload {
       return doTransactionInsert(db, threadstate);
     case "SCAN":
       return doTransactionScan(db, threadstate);
+    case "DELETE":
+      return doTransactionDelete(db, threadstate);
     default:
-      return doTransactionReadModifyWrite(db, threadstate);
+      return false;//doTransactionReadModifyWrite(db, threadstate);
     } 
   }
 
@@ -402,7 +439,7 @@ public class TimeseriesWorkload extends Workload {
       fields.add(groupByKey + tagPairDelimiter + groupByFunction);
     }
     if (downsample) {
-      fields.add(downsampleKey + tagPairDelimiter + downsampleFunction);
+      fields.add(downsampleKey + tagPairDelimiter + downsampleFunction + tagPairDelimiter + downsampleInterval);
     }
     
     final HashMap<String, ByteIterator> cells = new HashMap<String, ByteIterator>();
@@ -433,11 +470,101 @@ public class TimeseriesWorkload extends Workload {
   }
   
   protected boolean doTransactionScan(final DB db, Object threadstate) {
-    return false;
+    final ThreadState state = (ThreadState) threadstate;
+    
+    final String keyname = keys[Utils.random().nextInt(keys.length)];
+    
+    // choose a random scan length
+    int len = scanlength.nextValue().intValue();
+    
+    int offsets = Utils.random().nextInt(state.maxOffsets - 1);
+    final long startTimestamp;
+    if (offsets > 0) {
+      startTimestamp = state.startTimestamp + state.timestampGenerator.getOffset(offsets);
+    } else {
+      startTimestamp = state.startTimestamp;
+    }
+    
+    // rando tags
+    HashSet<String> fields = new HashSet<String>();
+    for (int i = 0; i < tagPairs; ++i) {
+      if (groupBy && groupBys[i]) {
+        fields.add(tagKeys[i]);
+      } else {
+        fields.add(tagKeys[i] + tagPairDelimiter + 
+            tagValues[Utils.random().nextInt(tagCardinality[i])]);
+      }
+    }
+    
+    if (queryTimeSpan > 0) {
+      final long endTimestamp;
+      if (queryRandomTimeSpan) {
+        endTimestamp = startTimestamp + (timestampInterval * Utils.random().nextInt(queryTimeSpan / timestampInterval));
+      } else {
+        endTimestamp = startTimestamp + queryTimeSpan;
+      }
+      fields.add(TIMESTAMP_KEY + tagPairDelimiter + startTimestamp + queryTimeSpanDelimiter + endTimestamp);
+    } else {
+      fields.add(TIMESTAMP_KEY + tagPairDelimiter + startTimestamp);  
+    }
+    if (groupBy) {
+      fields.add(groupByKey + tagPairDelimiter + groupByFunction);
+    }
+    if (downsample) {
+      fields.add(downsampleKey + tagPairDelimiter + downsampleFunction + tagPairDelimiter + downsampleInterval);
+    }
+    
+    final Vector<HashMap<String, ByteIterator>> results = new Vector<HashMap<String, ByteIterator>>();
+    final Status status = db.scan(table, keyname, len, fields, results);
+    
+//    if (dataintegrity && status == Status.OK) {
+//      verifyRow(keyname, cells);
+//    }
+    
+    return true;
   }
   
-  protected boolean doTransactionReadModifyWrite(final DB db, Object threadstate) {
-    return false;
+  protected boolean doTransactionDelete(final DB db, Object threadstate) {
+    final ThreadState state = (ThreadState) threadstate;
+    
+    final StringBuilder buf = new StringBuilder().append(keys[Utils.random().nextInt(keys.length)]);
+    
+    int offsets = Utils.random().nextInt(state.maxOffsets - 1);
+    final long startTimestamp;
+    if (offsets > 0) {
+      startTimestamp = state.startTimestamp + state.timestampGenerator.getOffset(offsets);
+    } else {
+      startTimestamp = state.startTimestamp;
+    }
+    
+    // rando tags
+    for (int i = 0; i < tagPairs; ++i) {
+      if (groupBy && groupBys[i]) {
+        buf.append(deleteDelimiter)
+           .append(tagKeys[i]);
+      } else {
+        buf.append(deleteDelimiter)
+           .append(tagKeys[i] + tagPairDelimiter + 
+               tagValues[Utils.random().nextInt(tagCardinality[i])]);
+      }
+    }
+    
+    if (queryTimeSpan > 0) {
+      final long endTimestamp;
+      if (queryRandomTimeSpan) {
+        endTimestamp = startTimestamp + (timestampInterval * Utils.random().nextInt(queryTimeSpan / timestampInterval));
+      } else {
+        endTimestamp = startTimestamp + queryTimeSpan;
+      }
+      buf.append(deleteDelimiter)
+         .append(TIMESTAMP_KEY + tagPairDelimiter + startTimestamp + queryTimeSpanDelimiter + endTimestamp);
+    } else {
+      buf.append(deleteDelimiter)
+         .append(TIMESTAMP_KEY + tagPairDelimiter + startTimestamp);  
+    }
+    
+    final Status status = db.delete(table, buf.toString());
+    return true;
   }
   
   protected Status verifyRow(final String key, final HashMap<String, ByteIterator> cells) {
