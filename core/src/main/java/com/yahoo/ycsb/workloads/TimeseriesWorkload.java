@@ -130,7 +130,7 @@ public class TimeseriesWorkload extends Workload {
   private int numKeys;
   private String[] tagKeys;
   private int[] tagCardinality;
-  private String[][] tagValues;
+  private String[] tagValues;
   private int firstIncrementableCardinality;
   
   // Query parameters
@@ -196,6 +196,7 @@ public class TimeseriesWorkload extends Workload {
     int idx = 0;
     totalCardinality = numKeys;
     seriesCardinality = 1;
+    int maxCardinality = 0;
     for (final String cardinality : tagCardinalityParts) {
       try {
         tagCardinality[idx] = Integer.parseInt(cardinality.trim());
@@ -209,6 +210,9 @@ public class TimeseriesWorkload extends Workload {
       }
       totalCardinality *= tagCardinality[idx];
       seriesCardinality *= tagCardinality[idx];
+      if (tagCardinality[idx] > maxCardinality) {
+        maxCardinality = tagCardinality[idx];
+      }
       ++idx;
       if (idx >= tagPairs) {
         // we have more cardinalities than tag keys so bail at this point.
@@ -217,6 +221,7 @@ public class TimeseriesWorkload extends Workload {
     }
     System.out.println("TOTAL CARD: " + totalCardinality);
     System.out.println("SERIES CARD: " + seriesCardinality);
+    System.out.println("MAX CARD: " + maxCardinality);
     if (numKeys < threads) {
       throw new WorkloadException("Field count " + numKeys + " (keys for time "
           + "series workloads) must be greater or equal to the number of "
@@ -244,20 +249,24 @@ public class TimeseriesWorkload extends Workload {
     }
     
     tagKeys = new String[tagPairs];
-    tagValues = new String[tagPairs][];
+    tagValues = new String[maxCardinality];
 
     for (int i = 0; i < tagPairs; ++i) {
       tagKeys[i] = tagKeyGenerator.nextString();
       
-      int cardinality = tagCardinality[i];
-      tagValues[i] = new String[cardinality];
-      for (int x = 0; x < cardinality; ++x) {
-        tagValues[i][x] = tagValueGenerator.nextString();
-      }
+//      int cardinality = tagCardinality[i];
+//      tagValues[i] = new String[cardinality];
+//      for (int x = 0; x < cardinality; ++x) {
+//        tagValues[i][x] = tagValueGenerator.nextString();
+//      }
     }
+    for (int i = 0; i < maxCardinality; i++) {
+      tagValues[i] = tagValueGenerator.nextString();
+    }
+    
     if (randomizeTimeseriesOrder) {
       for (int i = 0; i < tagValues.length; i++) {
-        Utils.shuffleArray(tagValues[i]);
+        Utils.shuffleArray(tagValues);
       }
     }
     
@@ -376,7 +385,7 @@ public class TimeseriesWorkload extends Workload {
         if (rndValue >= tagValues.length) {
           rndValue = 0;
         }
-        fields.add(tagKeys[rndKey++] + tagPairDelimiter + tagValues[rndValue][Utils.random().nextInt(tagValues[rndValue++].length)]);
+        fields.add(tagKeys[rndKey++] + tagPairDelimiter + tagValues[Utils.random().nextInt(tagCardinality[rndValue++])]);
       }
     }
     // TODO - only query up to the time that data has been written and randomly pick
@@ -464,7 +473,7 @@ public class TimeseriesWorkload extends Workload {
   protected long validationFunction(final String key, final long timestamp, 
       final TreeMap<String, String> tags) {
     final StringBuilder validationBuffer = new StringBuilder(keys[0].length() + 
-        (tagPairs * tagKeys[0].length()) + (tagPairs * tagValues[0].length));
+        (tagPairs * tagKeys[0].length()) + (tagPairs * tagCardinality[0]));
     for (final Entry<String, String> pair : tags.entrySet()) {
       validationBuffer.append(pair.getKey()).append(pair.getValue());
     }
@@ -552,9 +561,9 @@ public class TimeseriesWorkload extends Workload {
       final String key = keys[keyIdx];
       for (int i = 0; i < tagPairs; ++i) {
         int tvidx = tagValueIdxs[i];
-        map.put(tagKeys[i], new StringByteIterator(tagValues[i][tvidx]));
+        map.put(tagKeys[i], new StringByteIterator(tagValues[tvidx]));
         if (dataintegrity) {
-          validationTags.put(tagKeys[i], tagValues[i][tvidx]);
+          validationTags.put(tagKeys[i], tagValues[tvidx]);
         }
       }
       
