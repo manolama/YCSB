@@ -538,49 +538,55 @@ public class TimeseriesWorkload extends Workload {
     }
     
     private String nextDataPoint(HashMap<String, ByteIterator> map) {
+      int iterations = sparcity <= 0 ? 1 : Utils.random().nextInt((int) ((double) seriesCardinality * sparcity));
+      
       while (true) {
+        iterations--;
         if (rollover) {
           timestampGenerator.nextValue();
           rollover = false;
         }
-        final TreeMap<String, String> validationTags;
-        if (dataintegrity) {
-          validationTags = new TreeMap<String, String>();
-        } else {
-          validationTags = null;
-        }
-        final String key = keys[keyIdx];
-        for (int i = 0; i < tagPairs; ++i) {
-          int tvidx = tagValueIdxs[i];
-          map.put(tagKeys[i], new StringByteIterator(tagValues[tvidx]));
+        String key = null;
+        if (iterations <= 0) {
+          final TreeMap<String, String> validationTags;
           if (dataintegrity) {
-            validationTags.put(tagKeys[i], tagValues[tvidx]);
+            validationTags = new TreeMap<String, String>();
+          } else {
+            validationTags = null;
           }
-        }
-        
-        map.put(TIMESTAMP_KEY, new NumericByteIterator(timestampGenerator.currentValue()));
-        if (dataintegrity) {
-          map.put(VALUE_KEY, new NumericByteIterator(validationFunction(key, 
-              timestampGenerator.currentValue(), validationTags)));
-        } else {
-          switch (valueType) {
-          case INTEGERS:
-            map.put(VALUE_KEY, new NumericByteIterator(Utils.random().nextInt()));
-            break;
-          case FLOATS:
-            map.put(VALUE_KEY, new NumericByteIterator(
-                Utils.random().nextDouble() * (double) 100000));
-          case MIXED:
-            if (Utils.random().nextBoolean()) {
+          key = keys[keyIdx];
+          for (int i = 0; i < tagPairs; ++i) {
+            int tvidx = tagValueIdxs[i];
+            map.put(tagKeys[i], new StringByteIterator(tagValues[tvidx]));
+            if (dataintegrity) {
+              validationTags.put(tagKeys[i], tagValues[tvidx]);
+            }
+          }
+          
+          map.put(TIMESTAMP_KEY, new NumericByteIterator(timestampGenerator.currentValue()));
+          if (dataintegrity) {
+            map.put(VALUE_KEY, new NumericByteIterator(validationFunction(key, 
+                timestampGenerator.currentValue(), validationTags)));
+          } else {
+            switch (valueType) {
+            case INTEGERS:
               map.put(VALUE_KEY, new NumericByteIterator(Utils.random().nextInt()));
-            } else {
+              break;
+            case FLOATS:
               map.put(VALUE_KEY, new NumericByteIterator(
                   Utils.random().nextDouble() * (double) 100000));
-            }
-            break;
-          default:
-            throw new IllegalStateException("Somehow we didn't have a value type configured that we support: " + valueType);
-          }        
+            case MIXED:
+              if (Utils.random().nextBoolean()) {
+                map.put(VALUE_KEY, new NumericByteIterator(Utils.random().nextInt()));
+              } else {
+                map.put(VALUE_KEY, new NumericByteIterator(
+                    Utils.random().nextDouble() * (double) 100000));
+              }
+              break;
+            default:
+              throw new IllegalStateException("Somehow we didn't have a value type configured that we support: " + valueType);
+            }        
+          }
         }
         
         boolean tagRollover = false;
@@ -610,11 +616,7 @@ public class TimeseriesWorkload extends Workload {
           }
         }
         
-        if (sparcity <= 0) {
-          return key;
-        }
-        double rnd = Utils.random().nextDouble();
-        if (rnd >= sparcity) {
+        if (iterations <= 0) {
           return key;
         }
       }
