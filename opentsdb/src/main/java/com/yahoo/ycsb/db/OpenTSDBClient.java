@@ -27,7 +27,7 @@ import com.yahoo.ycsb.NumericByteIterator;
 import com.yahoo.ycsb.Status;
 import com.yahoo.ycsb.StringByteIterator;
 import com.yahoo.ycsb.Utils;
-import com.yahoo.ycsb.workloads.TimeseriesWorkload;
+import com.yahoo.ycsb.workloads.TimeSeriesWorkload;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -150,20 +150,20 @@ public class OpenTSDBClient extends com.yahoo.ycsb.DB {
     async = Boolean.parseBoolean(getProperties().getProperty(ASYNC_PROPERTY, ASYNC_PROPERTY_DEFAULT));
     
     timestampInterval = Integer.parseInt(getProperties().getProperty(
-        TimeseriesWorkload.TIMESTAMP_INTERVAL_PROPERTY, 
-        TimeseriesWorkload.TIMESTAMP_INTERVAL_PROPERTY_DEFAULT));
+        TimeSeriesWorkload.TIMESTAMP_INTERVAL_PROPERTY, 
+        TimeSeriesWorkload.TIMESTAMP_INTERVAL_PROPERTY_DEFAULT));
     tagPairDelimiter = getProperties().getProperty(
-        TimeseriesWorkload.PAIR_DELIMITER_PROPERTY, 
-        TimeseriesWorkload.PAIR_DELIMITER_PROPERTY_DEFAULT);
+        TimeSeriesWorkload.PAIR_DELIMITER_PROPERTY, 
+        TimeSeriesWorkload.PAIR_DELIMITER_PROPERTY_DEFAULT);
     queryTimeSpanDelimiter = getProperties().getProperty(
-        TimeseriesWorkload.QUERY_TIMESPAN_DELIMITER_PROPERTY,
-        TimeseriesWorkload.QUERY_TIMESPAN_DELIMITER_PROPERTY_DEFAULT);
+        TimeSeriesWorkload.QUERY_TIMESPAN_DELIMITER_PROPERTY,
+        TimeSeriesWorkload.QUERY_TIMESPAN_DELIMITER_PROPERTY_DEFAULT);
     groupByKey = getProperties().getProperty(
-        TimeseriesWorkload.GROUPBY_KEY_PROPERTY,
-        TimeseriesWorkload.GROUPBY_KEY_PROPERTY_DEFAULT);
+        TimeSeriesWorkload.GROUPBY_KEY_PROPERTY,
+        TimeSeriesWorkload.GROUPBY_KEY_PROPERTY_DEFAULT);
     downsampleKey = getProperties().getProperty(
-        TimeseriesWorkload.DOWNSAMPLING_KEY_PROPERTY,
-        TimeseriesWorkload.DOWNSAMPLING_KEY_PROPERTY_DEFAULT);
+        TimeSeriesWorkload.DOWNSAMPLING_KEY_PROPERTY,
+        TimeSeriesWorkload.DOWNSAMPLING_KEY_PROPERTY_DEFAULT);
   }
   
   @Override
@@ -219,14 +219,14 @@ public class OpenTSDBClient extends com.yahoo.ycsb.DB {
 
     final HashMap<String, String> tags = new HashMap<String, String>(values.size());
     for (final Entry<String, ByteIterator> entry : values.entrySet()) {
-      if (entry.getKey().equals(TimeseriesWorkload.VALUE_KEY)) {
+      if (entry.getKey().equals(TimeSeriesWorkload.VALUE_KEY)) {
         final NumericByteIterator it = (NumericByteIterator) entry.getValue();
         if (isFloat = it.isFloatingPoint()) {
           doubleVal = it.getDouble();
         } else {
           longVal = it.getLong();
         }
-      } else if (entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
+      } else if (entry.getKey().equals(TimeSeriesWorkload.TIMESTAMP_KEY)) {
         timestamp = Utils.bytesToLong(entry.getValue().toArray());
       } else {
         tags.put(entry.getKey(), new String(entry.getValue().toString()));
@@ -303,7 +303,7 @@ public class OpenTSDBClient extends com.yahoo.ycsb.DB {
     for (final String field : fields) {
       //System.out.println("FIELD: " + field);
       final String[] pair = field.split(tagPairDelimiter);
-      if (pair[0].equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
+      if (pair[0].equals(TimeSeriesWorkload.TIMESTAMP_KEY)) {
         final String[] range = pair[1].split(queryTimeSpanDelimiter);
         if (range.length == 1) {
           timestamp = Long.parseLong(range[0]);
@@ -363,8 +363,8 @@ public class OpenTSDBClient extends com.yahoo.ycsb.DB {
           //System.out.println("************************* DATA: " + dp.timestamp() + " " + dp.toDouble()+ "  isInteger: " + dp.isInteger());
           if (dp.timestamp() / 1000 == timestamp) {
             //System.out.println("matched, writing the value! DATA: " + dp.timestamp() + " " + dp.toDouble() + "  isInteger: " + dp.isInteger());
-            results.put(TimeseriesWorkload.TIMESTAMP_KEY, new NumericByteIterator(timestamp));
-            results.put(TimeseriesWorkload.VALUE_KEY, new NumericByteIterator(dp.isInteger() ? dp.longValue() : dp.doubleValue()));
+            results.put(TimeSeriesWorkload.TIMESTAMP_KEY, new NumericByteIterator(timestamp));
+            results.put(TimeSeriesWorkload.VALUE_KEY, new NumericByteIterator(dp.isInteger() ? dp.longValue() : dp.doubleValue()));
             return Status.OK;
           }
         }

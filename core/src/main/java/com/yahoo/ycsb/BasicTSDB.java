@@ -13,7 +13,7 @@ import org.HdrHistogram.Histogram;
 import org.HdrHistogram.Recorder;
 
 import com.yahoo.ycsb.measurements.Measurements;
-import com.yahoo.ycsb.workloads.TimeseriesWorkload;
+import com.yahoo.ycsb.workloads.TimeSeriesWorkload;
 
 public class BasicTSDB extends BasicDB {
 
@@ -38,11 +38,11 @@ public class BasicTSDB extends BasicDB {
     }
     
     tagPairDelimiter = getProperties().getProperty(
-        TimeseriesWorkload.PAIR_DELIMITER_PROPERTY, 
-        TimeseriesWorkload.PAIR_DELIMITER_PROPERTY_DEFAULT);
+        TimeSeriesWorkload.PAIR_DELIMITER_PROPERTY, 
+        TimeSeriesWorkload.PAIR_DELIMITER_PROPERTY_DEFAULT);
     queryTimeSpanDelimiter = getProperties().getProperty(
-        TimeseriesWorkload.QUERY_TIMESPAN_DELIMITER_PROPERTY,
-        TimeseriesWorkload.QUERY_TIMESPAN_DELIMITER_PROPERTY_DEFAULT);
+        TimeSeriesWorkload.QUERY_TIMESPAN_DELIMITER_PROPERTY,
+        TimeSeriesWorkload.QUERY_TIMESPAN_DELIMITER_PROPERTY_DEFAULT);
   }
   
   public Status read(String table, String key, Set<String> fields, HashMap<String, ByteIterator> result) {
@@ -68,7 +68,7 @@ public class BasicTSDB extends BasicDB {
       if (fields != null) {
         filtered = new HashSet<String>();
         for (final String field : fields) {
-          if (field.startsWith(TimeseriesWorkload.TIMESTAMP_KEY)) {
+          if (field.startsWith(TimeSeriesWorkload.TIMESTAMP_KEY)) {
             String[] parts = field.split(tagPairDelimiter);
             if (parts[1].contains(queryTimeSpanDelimiter)) {
               parts = parts[1].split(queryTimeSpanDelimiter);
@@ -106,9 +106,9 @@ public class BasicTSDB extends BasicDB {
       if (values != null) {
         final TreeMap<String, ByteIterator> tree = new TreeMap<String, ByteIterator>(values);
         for (Map.Entry<String, ByteIterator> entry : tree.entrySet()) {
-          if (entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
+          if (entry.getKey().equals(TimeSeriesWorkload.TIMESTAMP_KEY)) {
             sb.append(entry.getKey()).append("=").append(Utils.bytesToLong(entry.getValue().toArray())).append(" ");
-          } else if (entry.getKey().equals(TimeseriesWorkload.VALUE_KEY)) {
+          } else if (entry.getKey().equals(TimeSeriesWorkload.VALUE_KEY)) {
             final NumericByteIterator it = (NumericByteIterator) entry.getValue();
             isFloat = it.isFloatingPoint();
             sb.append(entry.getKey()).append("=").append(it.isFloatingPoint() ? it.getDouble() : it.getLong()).append(" ");
@@ -154,9 +154,9 @@ public class BasicTSDB extends BasicDB {
       if (values != null) {
         final TreeMap<String, ByteIterator> tree = new TreeMap<String, ByteIterator>(values);
         for (Map.Entry<String, ByteIterator> entry : tree.entrySet()) {
-          if (entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
+          if (entry.getKey().equals(TimeSeriesWorkload.TIMESTAMP_KEY)) {
             sb.append(entry.getKey()).append("=").append(Utils.bytesToLong(entry.getValue().toArray())).append(" ");
-          } else if (entry.getKey().equals(TimeseriesWorkload.VALUE_KEY)) {
+          } else if (entry.getKey().equals(TimeSeriesWorkload.VALUE_KEY)) {
             final NumericByteIterator it = (NumericByteIterator) entry.getValue();
             isFloat = it.isFloatingPoint();
             sb.append(entry.getKey()).append("=").append(it.isFloatingPoint() ? it.getDouble() : it.getLong()).append(" ");
@@ -217,9 +217,9 @@ public class BasicTSDB extends BasicDB {
   protected int hash(final String table, final String key, final HashMap<String, ByteIterator> values) {
     final TreeMap<String, ByteIterator> sorted = new TreeMap<String, ByteIterator>();
     for (final Entry<String, ByteIterator> entry : values.entrySet()) {
-      if (entry.getKey().equals(TimeseriesWorkload.VALUE_KEY)) {
+      if (entry.getKey().equals(TimeSeriesWorkload.VALUE_KEY)) {
         continue;
-      } else if (entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
+      } else if (entry.getKey().equals(TimeSeriesWorkload.TIMESTAMP_KEY)) {
         lastTimestamp = ((NumericByteIterator) entry.getValue()).getLong();
         entry.getValue().reset();
         continue;

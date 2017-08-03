@@ -18,16 +18,19 @@ import com.yahoo.ycsb.generator.DiscreteGenerator;
 import com.yahoo.ycsb.generator.ExponentialGenerator;
 import com.yahoo.ycsb.generator.HotspotIntegerGenerator;
 import com.yahoo.ycsb.generator.IncrementingPrintableStringGenerator;
+import com.yahoo.ycsb.generator.NumberGenerator;
 import com.yahoo.ycsb.generator.RandomDiscreteTimestampGenerator;
 import com.yahoo.ycsb.generator.RandomPrintableStringGenerator;
 import com.yahoo.ycsb.generator.ScrambledZipfianGenerator;
+import com.yahoo.ycsb.generator.SkewedLatestGenerator;
 import com.yahoo.ycsb.generator.UniformGenerator;
 import com.yahoo.ycsb.generator.UniformIntegerGenerator;
+import com.yahoo.ycsb.generator.ZipfianGenerator;
 
 public class YCSBSCRATCH {
 
   public static void main(String[] args) {
-    sparsity();
+    //sparsity();
     //randoTimestamps();
     //beano();
     //randomPrintableStringGenerator();

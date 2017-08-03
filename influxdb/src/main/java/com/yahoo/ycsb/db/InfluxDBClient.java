@@ -19,7 +19,7 @@ import com.yahoo.ycsb.NumericByteIterator;
 import com.yahoo.ycsb.Status;
 import com.yahoo.ycsb.Utils;
 import com.yahoo.ycsb.WorkloadException;
-import com.yahoo.ycsb.workloads.TimeseriesWorkload;
+import com.yahoo.ycsb.workloads.TimeSeriesWorkload;
 
 import okhttp3.HttpUrl;
 import okhttp3.MediaType;
@@ -106,8 +106,8 @@ public class InfluxDBClient extends com.yahoo.ycsb.DB {
     
     try {
       timeUnits = TimeUnit.valueOf(getProperties().getProperty(
-          TimeseriesWorkload.TIMESTAMP_UNITS_PROPERTY, 
-          TimeseriesWorkload.TIMESTAMP_UNITS_PROPERTY_DEFAULT).toUpperCase());
+          TimeSeriesWorkload.TIMESTAMP_UNITS_PROPERTY, 
+          TimeSeriesWorkload.TIMESTAMP_UNITS_PROPERTY_DEFAULT).toUpperCase());
     } catch (IllegalArgumentException e) {
       throw new IllegalArgumentException("Unknown time unit type", e);
     }
@@ -148,20 +148,20 @@ public class InfluxDBClient extends com.yahoo.ycsb.DB {
     }
     
     timestampInterval = Integer.parseInt(getProperties().getProperty(
-        TimeseriesWorkload.TIMESTAMP_INTERVAL_PROPERTY, 
-        TimeseriesWorkload.TIMESTAMP_INTERVAL_PROPERTY_DEFAULT));
+        TimeSeriesWorkload.TIMESTAMP_INTERVAL_PROPERTY, 
+        TimeSeriesWorkload.TIMESTAMP_INTERVAL_PROPERTY_DEFAULT));
     tagPairDelimiter = getProperties().getProperty(
-        TimeseriesWorkload.PAIR_DELIMITER_PROPERTY, 
-        TimeseriesWorkload.PAIR_DELIMITER_PROPERTY_DEFAULT);
+        TimeSeriesWorkload.PAIR_DELIMITER_PROPERTY, 
+        TimeSeriesWorkload.PAIR_DELIMITER_PROPERTY_DEFAULT);
     queryTimeSpanDelimiter = getProperties().getProperty(
-        TimeseriesWorkload.QUERY_TIMESPAN_DELIMITER_PROPERTY,
-        TimeseriesWorkload.QUERY_TIMESPAN_DELIMITER_PROPERTY_DEFAULT);
+        TimeSeriesWorkload.QUERY_TIMESPAN_DELIMITER_PROPERTY,
+        TimeSeriesWorkload.QUERY_TIMESPAN_DELIMITER_PROPERTY_DEFAULT);
     groupByKey = getProperties().getProperty(
-        TimeseriesWorkload.GROUPBY_KEY_PROPERTY,
-        TimeseriesWorkload.GROUPBY_KEY_PROPERTY_DEFAULT);
+        TimeSeriesWorkload.GROUPBY_KEY_PROPERTY,
+        TimeSeriesWorkload.GROUPBY_KEY_PROPERTY_DEFAULT);
     downsampleKey = getProperties().getProperty(
-        TimeseriesWorkload.DOWNSAMPLING_KEY_PROPERTY,
-        TimeseriesWorkload.DOWNSAMPLING_KEY_PROPERTY_DEFAULT);
+        TimeSeriesWorkload.DOWNSAMPLING_KEY_PROPERTY,
+        TimeSeriesWorkload.DOWNSAMPLING_KEY_PROPERTY_DEFAULT);
   }
 
   @Override
@@ -202,7 +202,7 @@ public class InfluxDBClient extends com.yahoo.ycsb.DB {
           query.append(" AND");
         }
         final String[] pair = field.split(tagPairDelimiter);
-        if (pair[0].equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
+        if (pair[0].equals(TimeSeriesWorkload.TIMESTAMP_KEY)) {
           final String[] range = pair[1].split(queryTimeSpanDelimiter);
           
           if (range.length == 1) {
@@ -286,14 +286,14 @@ public class InfluxDBClient extends com.yahoo.ycsb.DB {
       case NATIVE:
         final Point.Builder point = Point.measurement(key);
         for (final Entry<String, ByteIterator> entry : values.entrySet()) {
-          if (entry.getKey().equals(TimeseriesWorkload.VALUE_KEY)) {
+          if (entry.getKey().equals(TimeSeriesWorkload.VALUE_KEY)) {
             final NumericByteIterator it = (NumericByteIterator) entry.getValue();
             if (it.isFloatingPoint()) {
               point.addField("value", it.getDouble());
             } else {
               point.addField("value", it.getLong());
             }
-          } else if (entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
+          } else if (entry.getKey().equals(TimeSeriesWorkload.TIMESTAMP_KEY)) {
             point.time(Utils.bytesToLong(entry.getValue().toArray()), timeUnits);
           } else {
             point.tag(entry.getKey(), new String(entry.getValue().toString()));
@@ -309,14 +309,14 @@ public class InfluxDBClient extends com.yahoo.ycsb.DB {
 
         final HashMap<String, String> tags = new HashMap<String, String>(values.size());
         for (final Entry<String, ByteIterator> entry : values.entrySet()) {
-          if (entry.getKey().equals(TimeseriesWorkload.VALUE_KEY)) {
+          if (entry.getKey().equals(TimeSeriesWorkload.VALUE_KEY)) {
             final NumericByteIterator it = (NumericByteIterator) entry.getValue();
             if (isFloat = it.isFloatingPoint()) {
               doubleVal = it.getDouble();
             } else {
               longVal = it.getLong();
             }
-          } else if (entry.getKey().equals(TimeseriesWorkload.TIMESTAMP_KEY)) {
+          } else if (entry.getKey().equals(TimeSeriesWorkload.TIMESTAMP_KEY)) {
             timestamp = Utils.bytesToLong(entry.getValue().toArray());
           } else {
             tags.put(entry.getKey(), new String(entry.getValue().toString()));

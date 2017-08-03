@@ -35,7 +35,7 @@ import com.yahoo.ycsb.generator.UnixEpochTimestampGenerator;
 import com.yahoo.ycsb.generator.ZipfianGenerator;
 import com.yahoo.ycsb.measurements.Measurements;
 
-public class TimeseriesWorkload extends Workload {  
+public class TimeSeriesWorkload extends Workload {  
   
   public enum ValueType {
     INTEGERS("integers"),
@@ -62,7 +62,7 @@ public class TimeseriesWorkload extends Workload {
   public static final String VALUE_KEY = "YCSBV";
   
   /** Name and default value for the timestamp interval property. */    
-  public static final String TIMESTAMP_INTERVAL_PROPERTY = "timestamp_interval";    
+  public static final String TIMESTAMP_INTERVAL_PROPERTY = "timestampinterval";    
   public static final String TIMESTAMP_INTERVAL_PROPERTY_DEFAULT = "60";    
       
   /** Name and default value for the timestamp units property. */   
@@ -401,8 +401,7 @@ public class TimeseriesWorkload extends Workload {
   @Override
   public boolean doInsert(DB db, Object threadstate) {
     if (threadstate == null) {
-      //throw new WorkloadException("Missing thread state");
-      return false;
+      throw new IllegalStateException("Missing thread state.");
     }
     final HashMap<String, ByteIterator> tags = new HashMap<String, ByteIterator>(tagPairs);
     final String key = ((ThreadState)threadstate).nextDataPoint(tags);
@@ -415,8 +414,7 @@ public class TimeseriesWorkload extends Workload {
   @Override
   public boolean doTransaction(DB db, Object threadstate) {
     if (threadstate == null) {
-      //throw new WorkloadException("Missing thread state");
-      return false;
+      throw new IllegalStateException("Missing thread state.");
     }
     switch (operationchooser.nextString()) {
     case "READ":
@@ -440,12 +438,12 @@ public class TimeseriesWorkload extends Workload {
     return true;
   }
 
-  protected boolean doTransactionRead(final DB db, Object threadstate) {
-    //System.out.println("KEY CHOOSER: " + keychooser.nextValue().intValue());
-    final String keyname = keys[keychooser.nextValue().intValue()];
+  protected void doTransactionRead(final DB db, Object threadstate) {
     final ThreadState state = (ThreadState) threadstate;
+    final String keyname = keys[keychooser.nextValue().intValue()];
     
-    int offsets = Utils.random().nextInt(maxOffsets - 1);
+    int offsets = state.queryOffsetGenerator.nextValue().intValue();
+    //int offsets = Utils.random().nextInt(maxOffsets - 1);
     final long startTimestamp;
     if (offsets > 0) {
       startTimestamp = state.startTimestamp + state.timestampGenerator.getOffset(offsets);
@@ -488,28 +486,22 @@ public class TimeseriesWorkload extends Workload {
     if (dataintegrity && status == Status.OK) {
       verifyRow(keyname, cells);
     }
-    
-    return true;
   }
   
-  protected boolean doTransactionUpdate(final DB db, Object threadstate) {
+  protected void doTransactionUpdate(final DB db, Object threadstate) {
     if (threadstate == null) {
-      //throw new WorkloadException("Missing thread state");
-      return false;
+      throw new IllegalStateException("Missing thread state.");
     }
     final HashMap<String, ByteIterator> tags = new HashMap<String, ByteIterator>(tagPairs);
     final String key = ((ThreadState)threadstate).nextDataPoint(tags);
-    if (db.update(table, key, tags) == Status.OK) {
-      return true;
-    }
-    return false;
+    db.update(table, key, tags);
   }
   
-  protected boolean doTransactionInsert(final DB db, Object threadstate) {
-    return doInsert(db, threadstate);
+  protected void doTransactionInsert(final DB db, Object threadstate) {
+    doInsert(db, threadstate);
   }
   
-  protected boolean doTransactionScan(final DB db, Object threadstate) {
+  protected void doTransactionScan(final DB db, Object threadstate) {
     final ThreadState state = (ThreadState) threadstate;
     
     final String keyname = keys[Utils.random().nextInt(keys.length)];
@@ -560,11 +552,9 @@ public class TimeseriesWorkload extends Workload {
 //    if (dataintegrity && status == Status.OK) {
 //      verifyRow(keyname, cells);
 //    }
-    
-    return true;
   }
   
-  protected boolean doTransactionDelete(final DB db, Object threadstate) {
+  protected void doTransactionDelete(final DB db, Object threadstate) {
     final ThreadState state = (ThreadState) threadstate;
     
     final StringBuilder buf = new StringBuilder().append(keys[Utils.random().nextInt(keys.length)]);
@@ -603,8 +593,7 @@ public class TimeseriesWorkload extends Workload {
          .append(TIMESTAMP_KEY + tagPairDelimiter + startTimestamp);  
     }
     
-    final Status status = db.delete(table, buf.toString());
-    return true;
+    db.delete(table, buf.toString());
   }
   
   protected Status verifyRow(final String key, final HashMap<String, ByteIterator> cells) {
@@ -659,6 +648,7 @@ public class TimeseriesWorkload extends Workload {
    */
   protected class ThreadState {
     protected final UnixEpochTimestampGenerator timestampGenerator;
+    protected final NumberGenerator queryOffsetGenerator;
     
     private int keyIdx;
     private int keyIdxStart;
@@ -667,9 +657,6 @@ public class TimeseriesWorkload extends Workload {
 
     private boolean rollover;
     long startTimestamp;
-    final long interval;
-    final long threadOps;
-    
     
     protected ThreadState(final int threadID, final int threadCount) throws WorkloadException {
       int totalThreads = threadCount > 0 ? threadCount : 1;
@@ -711,10 +698,9 @@ public class TimeseriesWorkload extends Workload {
       }
       // Set the last value properly for the timestamp, otherwise it may start 
       // one interval ago.
-      timestampGenerator.nextValue();
-      startTimestamp = timestampGenerator.currentValue();
-      interval = timestampGenerator.getOffset(1);
-      threadOps = recordcount / totalThreads;
+      startTimestamp = timestampGenerator.nextValue();
+      // TODO - pick it
+      queryOffsetGenerator = new UniformIntegerGenerator(0, maxOffsets - 2);
     }
     
     private String nextDataPoint(HashMap<String, ByteIterator> map) {
