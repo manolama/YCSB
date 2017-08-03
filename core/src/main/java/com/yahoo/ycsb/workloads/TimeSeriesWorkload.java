@@ -66,64 +66,61 @@ public class TimeSeriesWorkload extends Workload {
   public static final String TIMESTAMP_INTERVAL_PROPERTY_DEFAULT = "60";    
       
   /** Name and default value for the timestamp units property. */   
-  public static final String TIMESTAMP_UNITS_PROPERTY = "timestamp_units";    
+  public static final String TIMESTAMP_UNITS_PROPERTY = "timestampunits";    
   public static final String TIMESTAMP_UNITS_PROPERTY_DEFAULT = "SECONDS"; 
   
-  public static final String TAG_COUNT_PROPERTY = "tag_count";
+  public static final String TAG_COUNT_PROPERTY = "tagcount";
   public static final String TAG_COUNT_PROPERTY_DEFAULT = "4";
   
-  public static final String TAG_CARDINALITY_PROPERTY = "tag_cardinality";
+  public static final String TAG_CARDINALITY_PROPERTY = "tagcardinality";
   public static final String TAG_CARDINALITY_PROPERTY_DEFAULT = "1, 2, 4, 8";
   
-  public static final String KEY_LENGTH_PROPERTY = "key_length";
-  public static final String KEY_LENGTH_PROPERTY_DEFAULT = "8";
-  
-  public static final String TAG_KEY_LENGTH_PROPERTY = "tag_key_length";
+  public static final String TAG_KEY_LENGTH_PROPERTY = "tagkeylength";
   public static final String TAG_KEY_LENGTH_PROPERTY_DEFAULT = "8";
   
-  public static final String TAG_VALUE_LENGTH_PROPERTY = "tag_value_length";
+  public static final String TAG_VALUE_LENGTH_PROPERTY = "tagvaluelength";
   public static final String TAG_VALUE_LENGTH_PROPERTY_DEFAULT = "8";
   
-  public static final String PAIR_DELIMITER_PROPERTY = "tag_pair_delimiter";
+  public static final String PAIR_DELIMITER_PROPERTY = "tagpairdelimiter";
   public static final String PAIR_DELIMITER_PROPERTY_DEFAULT = "=";
   
-  public static final String DELETE_DELIMITER_PROPERTY = "delete_delimiter";
+  public static final String DELETE_DELIMITER_PROPERTY = "deletedelimiter";
   public static final String DELETE_DELIMITER_PROPERTY_DEFAULT = ":";
   
-  public static final String RANDOMIZE_TIMESTAMP_ORDER_PROPERTY = "randomize_timestamp_order";
+  public static final String RANDOMIZE_TIMESTAMP_ORDER_PROPERTY = "randomwritetimestamporder";
   public static final String RANDOMIZE_TIMESTAMP_ORDER_PROPERTY_DEFAULT = "false";
   
-  public static final String RANDOMIZE_TIMESERIES_ORDER_PROPERTY = "randomize_timeseries_order";
+  public static final String RANDOMIZE_TIMESERIES_ORDER_PROPERTY = "randomtimeseriesorder";
   public static final String RANDOMIZE_TIMESERIES_ORDER_PROPERTY_DEFAULT = "false";
   
-  public static final String VALUE_TYPE_PROPERTY = "value_type";
-  public static final String VALUE_TYPE_PROPERTY_DEFAULT = "floats";
+  public static final String VALUE_TYPE_PROPERTY = "valuetype";
+  public static final String VALUE_TYPE_PROPERTY_DEFAULT = "integers";
   
   public static final String SPARSITY_PROPERTY = "sparsity";
   public static final String SPARSITY_PROPERTY_DEFAULT = "0.00";
   
   // Query params
-  public static final String QUERY_TIMESPAN_PROPERTY = "query_timespan";
+  public static final String QUERY_TIMESPAN_PROPERTY = "querytimespan";
   public static final String QUERY_TIMESPAN_PROPERTY_DEFAULT = "0";
   
-  public static final String QUERY_RANDOM_TIMESPAN_PROPERTY = "query_random_timespan";
+  public static final String QUERY_RANDOM_TIMESPAN_PROPERTY = "queryrandomtimespan";
   public static final String QUERY_RANDOM_TIMESPAN_PROPERTY_DEFAULT = "false";
   
-  public static final String QUERY_TIMESPAN_DELIMITER_PROPERTY = "query_timespan_delimiter";
+  public static final String QUERY_TIMESPAN_DELIMITER_PROPERTY = "querytimespandelimiter";
   public static final String QUERY_TIMESPAN_DELIMITER_PROPERTY_DEFAULT = ",";
   
-  public static final String GROUPBY_KEY_PROPERTY = "group_by_key";
+  public static final String GROUPBY_KEY_PROPERTY = "groupbykey";
   public static final String GROUPBY_KEY_PROPERTY_DEFAULT = "YCSBGB";
   
-  public static final String GROUPBY_PROPERTY = "group_by_function";
+  public static final String GROUPBY_PROPERTY = "groupbyfunction";
   
-  public static final String GROUPBY_KEYS_PROPERTY = "group_by_keys";
+  public static final String GROUPBY_KEYS_PROPERTY = "groupbykeys";
   
-  public static final String DOWNSAMPLING_KEY_PROPERTY = "downsampling_key";
+  public static final String DOWNSAMPLING_KEY_PROPERTY = "downsamplingkey";
   public static final String DOWNSAMPLING_KEY_PROPERTY_DEFAULT = "YCSBDS";
   
-  public static final String DOWNSAMPLING_FUNCTION_PROPERTY = "downsampling_function";
-  public static final String DOWNSAMPLING_INTERVAL_PROPERTY = "downsampling_interval";
+  public static final String DOWNSAMPLING_FUNCTION_PROPERTY = "downsamplingfunction";
+  public static final String DOWNSAMPLING_INTERVAL_PROPERTY = "downsamplinginterval";
   
   private Properties properties;
   
@@ -215,8 +212,8 @@ public class TimeSeriesWorkload extends Workload {
         RANDOMIZE_TIMESERIES_ORDER_PROPERTY_DEFAULT));
     
     // setup the key, tag key and tag value generators
-    final int keyLength = Integer.parseInt(p.getProperty(KEY_LENGTH_PROPERTY, 
-        KEY_LENGTH_PROPERTY_DEFAULT));
+    final int keyLength = Integer.parseInt(p.getProperty(CoreWorkload.FIELD_LENGTH_PROPERTY, 
+        CoreWorkload.FIELD_LENGTH_PROPERTY_DEFAULT));
     final int tagKeyLength = Integer.parseInt(p.getProperty(
         TAG_KEY_LENGTH_PROPERTY, TAG_KEY_LENGTH_PROPERTY_DEFAULT));
     final int tagValueLength = Integer.parseInt(p.getProperty(
@@ -388,6 +385,8 @@ public class TimeSeriesWorkload extends Workload {
     }
     
     valueType = ValueType.fromString(p.getProperty(VALUE_TYPE_PROPERTY, VALUE_TYPE_PROPERTY_DEFAULT));
+    
+    table = p.getProperty(CoreWorkload.TABLENAME_PROPERTY, CoreWorkload.TABLENAME_PROPERTY_DEFAULT);
   }
   
   @Override
