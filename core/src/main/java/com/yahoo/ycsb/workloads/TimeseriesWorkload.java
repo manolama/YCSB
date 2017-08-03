@@ -23,9 +23,13 @@ import com.yahoo.ycsb.Workload;
 import com.yahoo.ycsb.WorkloadException;
 import com.yahoo.ycsb.generator.DiscreteGenerator;
 import com.yahoo.ycsb.generator.Generator;
+import com.yahoo.ycsb.generator.HotspotIntegerGenerator;
 import com.yahoo.ycsb.generator.IncrementingPrintableStringGenerator;
 import com.yahoo.ycsb.generator.NumberGenerator;
 import com.yahoo.ycsb.generator.RandomDiscreteTimestampGenerator;
+import com.yahoo.ycsb.generator.ScrambledZipfianGenerator;
+import com.yahoo.ycsb.generator.SequentialGenerator;
+import com.yahoo.ycsb.generator.SkewedLatestGenerator;
 import com.yahoo.ycsb.generator.UniformIntegerGenerator;
 import com.yahoo.ycsb.generator.UnixEpochTimestampGenerator;
 import com.yahoo.ycsb.generator.ZipfianGenerator;
@@ -135,6 +139,9 @@ public class TimeseriesWorkload extends Workload {
   private int totalCardinality;
   private int seriesCardinality;
   protected NumberGenerator scanlength;
+  protected NumberGenerator keychooser;
+  protected DiscreteGenerator operationchooser;
+  protected int maxOffsets;
   
   private int recordcount;
   private int tagPairs;
@@ -181,6 +188,8 @@ public class TimeseriesWorkload extends Workload {
     if (recordcount == 0) {
       recordcount = Integer.MAX_VALUE;
     }
+    
+    operationchooser = CoreWorkload.createOperationGenerator(properties);
     
     int maxscanlength =
         Integer.parseInt(p.getProperty(CoreWorkload.MAX_SCAN_LENGTH_PROPERTY, 
@@ -295,6 +304,28 @@ public class TimeseriesWorkload extends Workload {
       Utils.shuffleArray(tagValues);
     }
     
+    String requestdistrib =
+        p.getProperty(CoreWorkload.REQUEST_DISTRIBUTION_PROPERTY, 
+            CoreWorkload.REQUEST_DISTRIBUTION_PROPERTY_DEFAULT);
+    if (requestdistrib.compareTo("uniform") == 0) {
+      keychooser = new UniformIntegerGenerator(0, keys.length - 1);
+    } else if (requestdistrib.compareTo("sequential") == 0) {
+      keychooser = new SequentialGenerator(0, keys.length- 1);
+    } else if (requestdistrib.compareTo("zipfian") == 0) {
+      keychooser = new ScrambledZipfianGenerator(0, keys.length- 1);
+    //} else if (requestdistrib.compareTo("latest") == 0) {
+      //keychooser = new SkewedLatestGenerator(transactioninsertkeysequence);
+    } else if (requestdistrib.equals("hotspot")) {
+      double hotsetfraction =
+          Double.parseDouble(p.getProperty(CoreWorkload.HOTSPOT_DATA_FRACTION, CoreWorkload.HOTSPOT_DATA_FRACTION_DEFAULT));
+      double hotopnfraction =
+          Double.parseDouble(p.getProperty(CoreWorkload.HOTSPOT_OPN_FRACTION, CoreWorkload.HOTSPOT_OPN_FRACTION_DEFAULT));
+      keychooser = new HotspotIntegerGenerator(0, keys.length- 1,
+          hotsetfraction, hotopnfraction);
+    } else {
+      throw new WorkloadException("Unknown request distribution \"" + requestdistrib + "\"");
+    }
+    
     // figure out the start timestamp based on the units, cardinality and interval
     try {
       timestampInterval = Integer.parseInt(p.getProperty(
@@ -314,6 +345,8 @@ public class TimeseriesWorkload extends Workload {
       throw new WorkloadException("YCSB doesn't support " + timeUnits + 
           " at this time.");
     }
+    
+    maxOffsets = (recordcount / totalCardinality) + 1;
     
     tagPairDelimiter = p.getProperty(PAIR_DELIMITER_PROPERTY, PAIR_DELIMITER_PROPERTY_DEFAULT);
     deleteDelimiter = p.getProperty(DELETE_DELIMITER_PROPERTY, DELETE_DELIMITER_PROPERTY_DEFAULT);
@@ -385,27 +418,34 @@ public class TimeseriesWorkload extends Workload {
       //throw new WorkloadException("Missing thread state");
       return false;
     }
-    switch (((ThreadState)threadstate).operationchooser.nextString()) {
+    switch (operationchooser.nextString()) {
     case "READ":
-      return doTransactionRead(db, threadstate);
+      doTransactionRead(db, threadstate);
+      break;
     case "UPDATE":
-      return doTransactionUpdate(db, threadstate);
+      doTransactionUpdate(db, threadstate);
+      break;
     case "INSERT": 
-      return doTransactionInsert(db, threadstate);
+      doTransactionInsert(db, threadstate);
+      break;
     case "SCAN":
-      return doTransactionScan(db, threadstate);
+      doTransactionScan(db, threadstate);
+      break;
     case "DELETE":
-      return doTransactionDelete(db, threadstate);
+      doTransactionDelete(db, threadstate);
+      break;
     default:
-      return false;//doTransactionReadModifyWrite(db, threadstate);
-    } 
+      return false;
+    }
+    return true;
   }
 
   protected boolean doTransactionRead(final DB db, Object threadstate) {
-    final String keyname = keys[Utils.random().nextInt(keys.length)];
+    //System.out.println("KEY CHOOSER: " + keychooser.nextValue().intValue());
+    final String keyname = keys[keychooser.nextValue().intValue()];
     final ThreadState state = (ThreadState) threadstate;
     
-    int offsets = Utils.random().nextInt(state.maxOffsets - 1);
+    int offsets = Utils.random().nextInt(maxOffsets - 1);
     final long startTimestamp;
     if (offsets > 0) {
       startTimestamp = state.startTimestamp + state.timestampGenerator.getOffset(offsets);
@@ -477,7 +517,7 @@ public class TimeseriesWorkload extends Workload {
     // choose a random scan length
     int len = scanlength.nextValue().intValue();
     
-    int offsets = Utils.random().nextInt(state.maxOffsets - 1);
+    int offsets = Utils.random().nextInt(maxOffsets - 1);
     final long startTimestamp;
     if (offsets > 0) {
       startTimestamp = state.startTimestamp + state.timestampGenerator.getOffset(offsets);
@@ -529,7 +569,7 @@ public class TimeseriesWorkload extends Workload {
     
     final StringBuilder buf = new StringBuilder().append(keys[Utils.random().nextInt(keys.length)]);
     
-    int offsets = Utils.random().nextInt(state.maxOffsets - 1);
+    int offsets = Utils.random().nextInt(maxOffsets - 1);
     final long startTimestamp;
     if (offsets > 0) {
       startTimestamp = state.startTimestamp + state.timestampGenerator.getOffset(offsets);
@@ -619,7 +659,6 @@ public class TimeseriesWorkload extends Workload {
    */
   protected class ThreadState {
     protected final UnixEpochTimestampGenerator timestampGenerator;
-    protected final DiscreteGenerator operationchooser;
     
     private int keyIdx;
     private int keyIdxStart;
@@ -630,7 +669,7 @@ public class TimeseriesWorkload extends Workload {
     long startTimestamp;
     final long interval;
     final long threadOps;
-    int maxOffsets;
+    
     
     protected ThreadState(final int threadID, final int threadCount) throws WorkloadException {
       int totalThreads = threadCount > 0 ? threadCount : 1;
@@ -653,7 +692,7 @@ public class TimeseriesWorkload extends Workload {
       }
       
       tagValueIdxs = new int[tagPairs]; // all zeros
-      maxOffsets = (recordcount / totalCardinality) + 1;
+      
       final String startingTimestamp = 
           properties.getProperty(CoreWorkload.INSERT_START_PROPERTY);
       if (startingTimestamp == null || startingTimestamp.isEmpty()) {
@@ -676,8 +715,6 @@ public class TimeseriesWorkload extends Workload {
       startTimestamp = timestampGenerator.currentValue();
       interval = timestampGenerator.getOffset(1);
       threadOps = recordcount / totalThreads;
-      
-      operationchooser = CoreWorkload.createOperationGenerator(properties);
     }
     
     private String nextDataPoint(HashMap<String, ByteIterator> map) {
