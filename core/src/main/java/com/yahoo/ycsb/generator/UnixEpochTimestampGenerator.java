@@ -43,17 +43,20 @@ import java.util.concurrent.TimeUnit;
  */
 public class UnixEpochTimestampGenerator extends Generator<Long> {
 
+  /** The base timestamp used as a starting reference. */
+  protected long startTimestamp;
+  
   /** The current timestamp that will be incremented. */
-  private long currentTimestamp;
+  protected long currentTimestamp;
 
   /** The last used timestamp. Should always be one interval behind current. */
-  private long lastTimestamp;
+  protected long lastTimestamp;
 
   /** The interval to increment by. Multiplied by {@link #timeUnits}. */
-  private long interval;
+  protected long interval;
 
   /** The units of time the interval represents. */
-  private TimeUnit timeUnits;
+  protected TimeUnit timeUnits;
 
   /**
    * Default ctor with the current system time and a 60 second interval.
@@ -95,6 +98,7 @@ public class UnixEpochTimestampGenerator extends Generator<Long> {
     // move the first timestamp by 1 interval so that the first call to nextValue
     // returns this timestamp
     this.currentTimestamp = startTimestamp - getOffset(1);
+    this.startTimestamp = currentTimestamp;
     lastTimestamp = currentTimestamp - getOffset(1);
   }
 
@@ -109,10 +113,12 @@ public class UnixEpochTimestampGenerator extends Generator<Long> {
       currentTimestamp = System.nanoTime() + getOffset(intervalOffset);
       break;
     case MICROSECONDS:
-      currentTimestamp = (System.nanoTime() / 1000) + getOffset(intervalOffset);
+      currentTimestamp = (System.nanoTime() / 1000) + 
+          getOffset(intervalOffset);
       break;
     case MILLISECONDS:
-      currentTimestamp = System.currentTimeMillis() + getOffset(intervalOffset);
+      currentTimestamp = System.currentTimeMillis() + 
+          getOffset(intervalOffset);
       break;
     case SECONDS:
       currentTimestamp = (System.currentTimeMillis() / 1000) +
@@ -133,6 +139,7 @@ public class UnixEpochTimestampGenerator extends Generator<Long> {
     default:
       throw new IllegalArgumentException("Unhandled time unit type: " + timeUnits);
     }
+    startTimestamp = currentTimestamp;
   }
 
   @Override
