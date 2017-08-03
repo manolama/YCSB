@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010 Yahoo! Inc., 2016 YCSB contributors. All rights reserved.
+ * Copyright (c) 2010 Yahoo! Inc., 2016-2017 YCSB contributors. All rights reserved.
  * <p>
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -225,5 +225,20 @@ public final class Utils {
       map.put(bean.getName().replace(" ", "_"), measurements);
     }
     return map;
+  }
+
+  /**
+   * Simple Fisher-Yates array shuffle to randomize discrete sets.
+   * @param array The array to randomly shuffle.
+   * @return The shuffled array.
+   */
+  public static <T> T [] shuffleArray(final T[] array) {
+    for (int i = array.length -1; i > 0; i--) {
+      final int idx = RAND.nextInt(i + 1);
+      final T temp = array[idx];
+      array[idx] = array[i];
+      array[i] = temp;
+    }
+    return array;
   }
 }

@@ -18,6 +18,7 @@
 package com.yahoo.ycsb;
 
 import java.util.*;
+import java.util.Map.Entry;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 
@@ -28,21 +29,33 @@ public class BasicDB extends DB {
   public static final String VERBOSE = "basicdb.verbose";
   public static final String VERBOSE_DEFAULT = "true";
 
+  public static final String COUNT = "basicdb.count";
+  public static final String COUNT_DEFAULT = "false";
+  
   public static final String SIMULATE_DELAY = "basicdb.simulatedelay";
   public static final String SIMULATE_DELAY_DEFAULT = "0";
 
   public static final String RANDOMIZE_DELAY = "basicdb.randomizedelay";
   public static final String RANDOMIZE_DELAY_DEFAULT = "true";
 
-  private boolean verbose;
-  private boolean randomizedelay;
-  private int todelay;
+  protected static final Object MUTEX = new Object();
+  protected static int counter = 0;
+  protected static Map<Integer, Integer> reads;
+  protected static Map<Integer, Integer> scans;
+  protected static Map<Integer, Integer> updates;
+  protected static Map<Integer, Integer> inserts;
+  protected static Map<Integer, Integer> deletes;
+  
+  protected boolean verbose;
+  protected boolean randomizedelay;
+  protected int todelay;
+  protected boolean count;
 
   public BasicDB() {
     todelay = 0;
   }
 
-  private void delay() {
+  protected void delay() {
     if (todelay > 0) {
       long delayNs;
       if (randomizedelay) {
@@ -65,11 +78,11 @@ public class BasicDB extends DB {
    * Initialize any state for this DB.
    * Called once per DB instance; there is one DB instance per client thread.
    */
-  @SuppressWarnings("unchecked")
   public void init() {
     verbose = Boolean.parseBoolean(getProperties().getProperty(VERBOSE, VERBOSE_DEFAULT));
     todelay = Integer.parseInt(getProperties().getProperty(SIMULATE_DELAY, SIMULATE_DELAY_DEFAULT));
     randomizedelay = Boolean.parseBoolean(getProperties().getProperty(RANDOMIZE_DELAY, RANDOMIZE_DELAY_DEFAULT));
+    count = Boolean.parseBoolean(getProperties().getProperty(COUNT, COUNT_DEFAULT));
     if (verbose) {
       synchronized (System.out) {
         System.out.println("***************** properties *****************");
@@ -82,6 +95,17 @@ public class BasicDB extends DB {
         }
         System.out.println("**********************************************");
       }
+    }
+    
+    synchronized (MUTEX) {
+      if (counter == 0 && count) {
+        reads = new HashMap<Integer, Integer>();
+        scans = new HashMap<Integer, Integer>();
+        updates = new HashMap<Integer, Integer>();
+        inserts = new HashMap<Integer, Integer>();
+        deletes = new HashMap<Integer, Integer>();
+      }
+      counter++;
     }
   }
 
@@ -125,6 +149,10 @@ public class BasicDB extends DB {
       System.out.println(sb);
     }
 
+    if (count) {
+      incCounter(reads, hash(table, key, fields));
+    }
+    
     return Status.OK;
   }
 
@@ -158,6 +186,10 @@ public class BasicDB extends DB {
       System.out.println(sb);
     }
 
+    if (count) {
+      incCounter(scans, hash(table, startkey, fields));
+    }
+    
     return Status.OK;
   }
 
@@ -185,6 +217,10 @@ public class BasicDB extends DB {
       System.out.println(sb);
     }
 
+    if (count) {
+      incCounter(updates, hash(table, key, values));
+    }
+    
     return Status.OK;
   }
 
@@ -213,6 +249,10 @@ public class BasicDB extends DB {
       System.out.println(sb);
     }
 
+    if (count) {
+      incCounter(inserts, hash(table, key, values));
+    }
+    
     return Status.OK;
   }
 
@@ -233,9 +273,69 @@ public class BasicDB extends DB {
       System.out.println(sb);
     }
 
+    if (count) {
+      incCounter(deletes, (table + key).hashCode());
+    }
+    
     return Status.OK;
   }
 
+  @Override
+  public void cleanup() {
+    synchronized (MUTEX) {
+      int countDown = --counter;
+      if (count && countDown < 1) {
+        // TODO - would be nice to call something like: 
+        // Measurements.getMeasurements().oneOffMeasurement("READS", "Uniques", reads.size());
+        System.out.println("[READS], Uniques, " + reads.size());
+        System.out.println("[SCANS], Uniques, " + scans.size());
+        System.out.println("[UPDATES], Uniques, " + updates.size());
+        System.out.println("[INSERTS], Uniques, " + inserts.size());
+        System.out.println("[DELETES], Uniques, " + deletes.size());
+      }
+    }
+  }
+  
+  protected void incCounter(final Map<Integer, Integer> map, final int hash) {
+    synchronized (map) {
+      Integer ctr = map.get(hash);
+      if (ctr == null) {
+        map.put(hash, 1);
+      } else {
+        map.put(hash, ctr + 1);
+      }
+    }
+  }
+  
+  protected int hash(final String table, final String key, final Set<String> fields) {
+    if (fields == null) {
+      return (table + key).hashCode();
+    }
+    StringBuilder buf = new StringBuilder().append(table).append(key);
+    List<String> sorted = new ArrayList<String>(fields);
+    Collections.sort(sorted);
+    for (final String field : sorted) {
+      buf.append(field);
+    }
+    return buf.toString().hashCode();
+  }
+  
+  protected int hash(final String table, final String key, final HashMap<String, ByteIterator> values) {
+    if (values == null) {
+      return (table + key).hashCode();
+    }
+    final TreeMap<String, ByteIterator> sorted = 
+        new TreeMap<String, ByteIterator>(values);
+    
+    StringBuilder buf = new StringBuilder().append(table).append(key);
+    for (final Entry<String, ByteIterator> entry : sorted.entrySet()) {
+      entry.getValue().reset();
+      buf.append(entry.getKey())
+         .append(entry.getValue().toString());
+    }
+    return buf.toString().hashCode();
+  }
+  
   /**
    * Short test of BasicDB
    */
